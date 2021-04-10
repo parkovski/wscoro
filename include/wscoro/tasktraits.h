@@ -112,7 +112,7 @@ struct AutoTaskTraits {
   using is_async = std::true_type;
   using is_awaiter = std::true_type;
   using exception_behavior = handle_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std::suspend_never;
   using move_result = std::true_type;
 };
 
