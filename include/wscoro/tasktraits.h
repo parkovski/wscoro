@@ -94,6 +94,28 @@ template<typename T> struct DefaultTaskTraits {
   using move_result = std::true_type;
 };
 
+// A synchronous task that starts immediately. Basically a coroutine wrapper
+// for a simple function call.
+struct ImmediateTraits {
+  using is_generator = std::false_type;
+  using is_async = std::false_type;
+  using is_awaiter = std::false_type;
+  using exception_behavior = rethrow_exceptions;
+  using initial_suspend_type = std::suspend_never;
+  using move_result = std::true_type;
+};
+
+// A synchronous task that suspends initially, and then calculates a single
+// value on demand. This is the coroutine equivalent of a lambda.
+struct LazyTraits {
+  using is_generator = std::false_type;
+  using is_async = std::false_type;
+  using is_awaiter = std::false_type;
+  using exception_behavior = rethrow_exceptions;
+  using initial_suspend_type = std::suspend_always;
+  using move_result = std::true_type;
+};
+
 // A general purpose task type. Starts suspended and may await other
 // coroutines.
 struct TaskTraits {
@@ -113,28 +135,6 @@ struct AutoTaskTraits {
   using is_awaiter = std::true_type;
   using exception_behavior = handle_exceptions;
   using initial_suspend_type = std::suspend_never;
-  using move_result = std::true_type;
-};
-
-// A synchronous task that starts immediately. Does the same thing as a
-// function call but wrapped as a coroutine.
-struct ImmediateTraits {
-  using is_generator = std::false_type;
-  using is_async = std::false_type;
-  using is_awaiter = std::false_type;
-  using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_never;
-  using move_result = std::true_type;
-};
-
-// A synchronous task that suspends initially, and then calculates a single
-// value on demand. This is the coroutine equivalent of a lambda.
-struct LazyTraits {
-  using is_generator = std::false_type;
-  using is_async = std::false_type;
-  using is_awaiter = std::false_type;
-  using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_always;
   using move_result = std::true_type;
 };
 

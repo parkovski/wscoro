@@ -7,8 +7,37 @@
 
 namespace wscoro {
 
+template<typename T>
+concept Coroutine = requires(T t) {
+  { const_cast<const T &>(t).done() } -> std::same_as<bool>;
+  { t.resume() };
+  { t.destroy() };
+};
+
+class BasicCoroutine {
+public:
+  virtual ~BasicCoroutine() {}
+  virtual bool done() const = 0;
+  virtual void resume() = 0;
+  virtual void destroy() = 0;
+  void operator()() { resume(); }
+};
+
+template<typename T>
+class BasicAwaitable {
+public:
+  virtual ~BasicAwaitable() {}
+
+  virtual bool await_ready() const = 0;
+
+  virtual std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<> continuation) = 0;
+
+  virtual T await_resume() = 0;
+};
+
 template<typename T, CoroutineTraits Traits>
-class BasicTask {
+class BasicTask : public BasicCoroutine, public BasicAwaitable<T> {
 public:
   // 
   struct promise_type : Promise<BasicTask, T, Traits> {};
@@ -28,11 +57,13 @@ public:
     typename Traits::is_awaiter
   >;
 
+  friend struct std::hash<BasicTask>;
+
 protected:
   std::coroutine_handle<promise_type> _coroutine;
 
 public:
-  BasicTask(std::coroutine_handle<promise_type> coroutine) noexcept
+  constexpr BasicTask(std::coroutine_handle<promise_type> coroutine) noexcept
     : _coroutine{coroutine}
   {}
 
@@ -42,18 +73,28 @@ public:
   BasicTask(BasicTask &&) = default;
   BasicTask &operator=(BasicTask &&) = default;
 
-  // Calling this when you're not supposed to will break things.
-  // Note: should be const but coroutine_handle::resume is not const in clang.
-  void resume() {
-    _coroutine.resume();
+  friend void swap(BasicTask &a, BasicTask &b) {
+    auto tmp = a._coroutine;
+    a._coroutine = b._coroutine;
+    b._coroutine = tmp;
   }
 
-  bool done() const {
+  bool done() const override {
     return _coroutine.done();
   }
 
+  // Calling this when you're not supposed to will break things.
+  // Note: should be const but coroutine_handle::resume is not const in clang.
+  void resume() override {
+    _coroutine.resume();
+  }
+
+  void destroy() override {
+    _coroutine.destroy();
+  }
+
   // If the coroutine is already done, we can skip the suspend stage.
-  bool await_ready() const {
+  bool await_ready() const override {
     if constexpr (Traits::is_generator::value) {
       return _coroutine.promise().has_data();
     } else {
@@ -64,11 +105,14 @@ public:
   // Should be const but clang and coroutine_handle::resume.
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<> continuation)
-    noexcept(Traits::is_async::value)
+    noexcept(Traits::is_async::value) override
   {
     if constexpr (Traits::is_generator::value) {
       // If a generator is done and someone awaits it, we "eat" that
-      // continuation and fully suspend to this task's awaiter.
+      // continuation and fully suspend to this task's awaiter. This is only
+      // done for generators because after they are done, there is no data
+      // for the co_await to return.
+      // TODO: Is this the correct approach here? Should I throw an exception?
       if (_coroutine.done()) {
         log::warn("Generator discarded continuation because it was finished.");
         continuation.destroy();
@@ -83,17 +127,16 @@ public:
     } else {
       _coroutine.resume();
       return continuation;
-      // return _coroutine;
     }
   }
 
   // If exception behavior is to save and rethrow (handle_exceptions) and one
   // was thrown and not caught, it will be rethrown here. For non-void types,
   // this returns the value from the inner coroutine's co_return.
-  template<bool HandleExceptions = std::is_same_v<
-      typename Traits::exception_behavior, traits::handle_exceptions>>
-  T await_resume() {
-    if constexpr (HandleExceptions) {
+  T await_resume() override {
+    if constexpr (std::is_same_v<typename Traits::exception_behavior,
+                                 traits::handle_exceptions>)
+    {
       if (auto ex = _coroutine.promise()._exception) {
         std::rethrow_exception(ex);
       }
@@ -101,32 +144,25 @@ public:
 
     if constexpr (std::is_void_v<T>) {
       return;
+    } else if constexpr (Traits::move_result::value) {
+      return std::move(_coroutine.promise()).take_data();
+    } else {
+      return _coroutine.promise().take_data();
     }
-
-    if constexpr (std::is_move_constructible_v<T>) {
-      if constexpr (Traits::move_result::value ||
-                    !std::is_copy_constructible_v<T>) {
-        return std::move(_coroutine.promise()).take_data();
-      }
-    }
-
-    static_assert(std::is_copy_constructible_v<T>,
-                  "Type cannot be moved or copied.");
-    return _coroutine.promise().take_data();
   }
 };
-
-template<typename T = void>
-using Task = BasicTask<T, traits::TaskTraits>;
-
-template<typename T = void>
-using AutoTask = BasicTask<T, traits::AutoTaskTraits>;
 
 template<typename T = void>
 using Immediate = BasicTask<T, traits::ImmediateTraits>;
 
 template<typename T = void>
 using Lazy = BasicTask<T, traits::LazyTraits>;
+
+template<typename T = void>
+using Task = BasicTask<T, traits::TaskTraits>;
+
+template<typename T = void>
+using AutoTask = BasicTask<T, traits::AutoTaskTraits>;
 
 template<typename T>
 using Generator = BasicTask<T, traits::GeneratorTraits>;
@@ -143,16 +179,16 @@ template<typename T, CoroutineTraits Traits>
 using BasicCopyTask = BasicTask<T, traits::CopyResultTraits<Traits>>;
 
 template<typename T = void>
-using CopyTask = BasicCopyTask<T, traits::TaskTraits>;
-
-template<typename T = void>
-using CopyAutoTask = BasicCopyTask<T, traits::AutoTaskTraits>;
-
-template<typename T = void>
 using CopyImmediate = BasicCopyTask<T, traits::ImmediateTraits>;
 
 template<typename T = void>
 using CopyLazy = BasicCopyTask<T, traits::LazyTraits>;
+
+template<typename T = void>
+using CopyTask = BasicCopyTask<T, traits::TaskTraits>;
+
+template<typename T = void>
+using CopyAutoTask = BasicCopyTask<T, traits::AutoTaskTraits>;
 
 template<typename T>
 using CopyGenerator = BasicCopyTask<T, traits::GeneratorTraits>;
@@ -160,6 +196,13 @@ using CopyGenerator = BasicCopyTask<T, traits::GeneratorTraits>;
 template<typename T>
 using CopyAsyncGenerator = BasicCopyTask<T, traits::AsyncGeneratorTraits>;
 
-using CopyFireAndForget = BasicCopyTask<void, traits::FireAndForgetTraits>;
-
 } // namespace wscoro
+
+namespace std {
+  template<typename T, ::wscoro::CoroutineTraits Traits>
+  struct hash<::wscoro::BasicTask<T, Traits>> {
+    auto operator()(const ::wscoro::BasicTask<T, Traits> &task) const noexcept {
+      return hash<remove_cvref_t<decltype(task._coroutine)>>{}(task._coroutine);
+    }
+  };
+}
