@@ -11,19 +11,18 @@ namespace wscoro {
 namespace detail {
 
 // A type that suspends to the awaiter.
-template<bool Continuation>
+template<bool Continuation, typename P>
 struct ReadySuspend;
 
 // This is a continuation-supported promise awaiter. It always suspends and if
 // there is a pending continuation, resumes it.
-template<>
-struct ReadySuspend<true> {
+template<typename P>
+struct ReadySuspend<true, P> {
   // Return false to always suspend at this point.
   bool await_ready() const noexcept { return false; }
 
   // If there was a continuation, return it to let the caller resume it.
   // This is the last of the coroutine work.
-  template<typename P>
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<P> coroutine) const noexcept {
     if (auto continuation = coroutine.promise()._continuation) {
@@ -42,8 +41,8 @@ struct ReadySuspend<true> {
 
 // If there is no continuation, all there is to do is just suspend to the
 // awaiter.
-template<>
-struct ReadySuspend<false> : std::suspend_always {};
+template<typename P>
+struct ReadySuspend<false, P> : std::suspend_always {};
 
 // Behavior when an unhandled exception is thrown inside the coroutine.
 template<traits::ExceptionBehavior EB> struct PromiseUnhandledException;
@@ -237,7 +236,7 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Move value into internal data where it will be moved out at
   // await_resume.
   template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  ReadySuspend<Async> yield_value(T &&value)
+  ReadySuspend<Async, P> yield_value(T &&value)
     noexcept(std::is_nothrow_move_constructible_v<T>)
   {
     this->init_data(std::move(value));
@@ -247,7 +246,7 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Copy value into internal data where it will be moved/copied out at
   // await_resume.
   template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  ReadySuspend<Async> yield_value(const T &value)
+  ReadySuspend<Async, P> yield_value(const T &value)
     noexcept(std::is_nothrow_copy_constructible_v<T>)
   {
     this->init_data(value);
@@ -313,9 +312,10 @@ struct Promise :
 
   // If inner await is supported and there is a pending continuation,
   // it will be resumed here.
-  auto final_suspend() const noexcept {
+  detail::ReadySuspend<Traits::is_async::value, typename TTask::promise_type>
+  final_suspend() const noexcept {
     log::trace("Promise::final_suspend");
-    return detail::ReadySuspend<Traits::is_async::value>{};
+    return {};
   }
 };
 

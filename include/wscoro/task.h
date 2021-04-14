@@ -97,46 +97,28 @@ public:
     }
   }
 
-protected:
-  template<bool Async = Traits::is_async::value>
-  std::coroutine_handle<>
-  _await_suspend(std::coroutine_handle<> continuation);
-
-  template<>
-  std::coroutine_handle<>
-  _await_suspend<false>(std::coroutine_handle<> continuation) {
-    _coroutine.resume();
-    return continuation;
-  }
-
-  template<>
-  std::coroutine_handle<>
-  _await_suspend<true>(std::coroutine_handle<> continuation) {
-    assert(!_coroutine.promise()._continuation);
-    _coroutine.promise()._continuation = continuation;
-
-    // If there is an initial suspend, await is the mechanism to start the
-    // coroutine. If there is no initial suspend, the coroutine starts
-    // automatically, so we should not resume it at an arbitrary location.
-    // TODO: The following line should work but LLVM's await_ready is not
-    // constexpr.
-    // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
-    if constexpr (std::is_convertible_v<
-      typename Traits::initial_suspend_type, std::suspend_never>)
-    {
-      return std::noop_coroutine();
-    } else {
-      return _coroutine;
-    }
-  }
-
-public:
   // Should be const but clang and coroutine_handle::resume.
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<> continuation)
-    noexcept(noexcept(_await_suspend(continuation))) override
+    noexcept(Traits::is_async::value) override
   {
-    return _await_suspend(continuation);
+    if constexpr (!Traits::is_async::value) {
+      _coroutine.resume();
+      return continuation;
+      // TODO: The following line should work but LLVM's await_ready is not
+      // constexpr.
+      // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
+    } else if constexpr (std::is_convertible_v<
+      typename Traits::initial_suspend_type, std::suspend_never>)
+    {
+      // If there is no initial suspend, the coroutine starts
+      // automatically, so we should not resume it at an arbitrary location.
+      return std::noop_coroutine();
+    } else {
+      // If there is an initial suspend, await is the mechanism to start the
+      // coroutine.
+      return _coroutine;
+    }
   }
 
   // If exception behavior is to save and rethrow (handle_exceptions) and one
