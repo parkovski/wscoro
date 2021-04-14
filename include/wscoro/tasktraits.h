@@ -39,7 +39,6 @@ concept CoroutineTraits = requires (typename T::initial_suspend_type is) {
   { (bool)(typename T::is_awaiter{}) } -> std::same_as<bool>;
   { (bool)(typename T::is_async{}) } -> std::same_as<bool>;
   { typename T::exception_behavior{} } -> ExceptionBehavior;
-  { typename T::initial_suspend_type{} };
   { is.await_ready() } -> std::same_as<bool>;
   { is.await_resume() };
   // { await_suspend({}) or await_suspend() } -> AwaitSuspendReturn;
@@ -81,17 +80,17 @@ template<typename T> struct DefaultTaskTraits {
   using exception_behavior =
     std::conditional<is_async::value, handle_exceptions, rethrow_exceptions>;
 
+  // initial_suspend_type
   // Type returned from promise's initial_suspend - should be
   // std::suspend_never or std::suspend_always (default), but any awaiter is
   // valid if there's a reason to customize this further. Issuing a suspend
   // here will stop the coroutine before any of its work is done. Otherwise
   // the coroutine will immediately run to the next suspend point on
   // creation.
-  using initial_suspend_type = std::suspend_always;
 
+  // move_result
   // Try to move data out of the promise. Data is only copied if a move can't
   // be done. If this is false, data is moved only when a copy can't be done.
-  using move_result = std::true_type;
 };
 
 // A synchronous task that starts immediately. Basically a coroutine wrapper

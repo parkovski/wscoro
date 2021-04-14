@@ -49,13 +49,9 @@ public:
   // co_yield.
   using is_generator = typename Traits::is_generator;
 
-  // If either of these is true (std::true_type), the task could execute
-  // asynchronously. If both are false (std::false_type), awaiting the task
-  // is synchronous.
-  using is_async = std::disjunction<
-    typename Traits::is_async,
-    typename Traits::is_awaiter
-  >;
+  // This means the promise has a continuation. Without one, awaiting the
+  // task will block the coroutine until it is done.
+  using is_async = typename Traits::is_async;
 
   friend struct std::hash<BasicTask>;
 
@@ -73,10 +69,9 @@ public:
   BasicTask(BasicTask &&) = default;
   BasicTask &operator=(BasicTask &&) = default;
 
-  friend void swap(BasicTask &a, BasicTask &b) {
-    auto tmp = a._coroutine;
-    a._coroutine = b._coroutine;
-    b._coroutine = tmp;
+  friend void swap(BasicTask &a, BasicTask &b) noexcept {
+    using std::swap;
+    swap(a._coroutine, b._coroutine);
   }
 
   bool done() const override {
@@ -102,32 +97,46 @@ public:
     }
   }
 
+protected:
+  template<bool Async = Traits::is_async::value>
+  std::coroutine_handle<>
+  _await_suspend(std::coroutine_handle<> continuation);
+
+  template<>
+  std::coroutine_handle<>
+  _await_suspend<false>(std::coroutine_handle<> continuation) {
+    _coroutine.resume();
+    return continuation;
+  }
+
+  template<>
+  std::coroutine_handle<>
+  _await_suspend<true>(std::coroutine_handle<> continuation) {
+    assert(!_coroutine.promise()._continuation);
+    _coroutine.promise()._continuation = continuation;
+
+    // If there is an initial suspend, await is the mechanism to start the
+    // coroutine. If there is no initial suspend, the coroutine starts
+    // automatically, so we should not resume it at an arbitrary location.
+    // TODO: The following line should work but LLVM's await_ready is not
+    // constexpr.
+    // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
+    if constexpr (std::is_convertible_v<
+      typename Traits::initial_suspend_type, std::suspend_never>)
+    {
+      return std::noop_coroutine();
+    } else {
+      return _coroutine;
+    }
+  }
+
+public:
   // Should be const but clang and coroutine_handle::resume.
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<> continuation)
-    noexcept(Traits::is_async::value) override
+    noexcept(noexcept(_await_suspend(continuation))) override
   {
-    if constexpr (Traits::is_generator::value) {
-      // If a generator is done and someone awaits it, we "eat" that
-      // continuation and fully suspend to this task's awaiter. This is only
-      // done for generators because after they are done, there is no data
-      // for the co_await to return.
-      // TODO: Is this the correct approach here? Should I throw an exception?
-      if (_coroutine.done()) {
-        log::warn("Generator discarded continuation because it was finished.");
-        continuation.destroy();
-        return std::noop_coroutine();
-      }
-    }
-
-    if constexpr (Traits::is_async::value) {
-      assert(!_coroutine.promise()._continuation);
-      _coroutine.promise()._continuation = continuation;
-      return _coroutine;
-    } else {
-      _coroutine.resume();
-      return continuation;
-    }
+    return _await_suspend(continuation);
   }
 
   // If exception behavior is to save and rethrow (handle_exceptions) and one
@@ -175,19 +184,20 @@ using FireAndForget = BasicTask<void, traits::FireAndForgetTraits>;
 // -----
 
 // A copy task copies the result data instead of moving.
-template<typename T, CoroutineTraits Traits>
+template<typename T, CoroutineTraits Traits,
+         typename = std::enable_if_t<!std::is_void_v<T>>>
 using BasicCopyTask = BasicTask<T, traits::CopyResultTraits<Traits>>;
 
-template<typename T = void>
+template<typename T>
 using CopyImmediate = BasicCopyTask<T, traits::ImmediateTraits>;
 
-template<typename T = void>
+template<typename T>
 using CopyLazy = BasicCopyTask<T, traits::LazyTraits>;
 
-template<typename T = void>
+template<typename T>
 using CopyTask = BasicCopyTask<T, traits::TaskTraits>;
 
-template<typename T = void>
+template<typename T>
 using CopyAutoTask = BasicCopyTask<T, traits::AutoTaskTraits>;
 
 template<typename T>

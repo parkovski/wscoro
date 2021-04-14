@@ -3,13 +3,6 @@
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-namespace wscoro::detail {
-  size_t next_task_id() noexcept {
-    static size_t id = 0;
-    return id++;
-  }
-}
-
 std::shared_ptr<spdlog::logger> g_logger;
 struct DestroyLogger {
   ~DestroyLogger() {

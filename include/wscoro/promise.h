@@ -218,8 +218,7 @@ struct PromiseData<P, T, Async, false> : PromiseDataBase<T> {
   }
 };
 
-// A type with yield support may write to the data multiple times. Uses
-// assignment operators.
+// A type with yield support may "return" multiple times.
 template<typename P, typename T, bool Async>
 struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Generators can't return a value. This discards the current continuation
@@ -230,7 +229,7 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
       if (auto continuation = promise->_continuation) {
         promise->_continuation = nullptr;
         continuation.destroy();
-        log::debug("generator discarded final continuation");
+        log::warn("Generator finished and discarded its continuation.");
       }
     }
   }
@@ -295,7 +294,10 @@ struct Promise :
   detail::PromiseUnhandledException<typename Traits::exception_behavior>,
   detail::PromiseAwaitTransform<typename Traits::is_awaiter {}>
 {
-  TTask get_return_object() noexcept {
+  TTask get_return_object()
+    noexcept(std::is_nothrow_constructible_v<
+      TTask, std::coroutine_handle<typename TTask::promise_type>>)
+  {
     TTask task(
       std::coroutine_handle<typename TTask::promise_type>::from_promise(
         *static_cast<typename TTask::promise_type *>(this)));
