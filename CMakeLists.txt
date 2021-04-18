@@ -18,10 +18,10 @@ option(WSCORO_BUILD_TESTS "Build tests" ON)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   if(WIN32)
-    add_compile_options(-fcolor-diagnostics -Xclang -stdlib=libc++)
+    add_compile_options(-Xclang -stdlib=libc++)
     add_link_options(-lc++experimental -lc++abi)
   else()
-    add_compile_options(-fcolor-diagnostics -stdlib=libc++)
+    add_compile_options(-stdlib=libc++)
     add_link_options(-lc++experimental -lc++abi)
   endif()
 
