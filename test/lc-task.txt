@@ -1,0 +1,38 @@
+R"(0 executor init
+1 promise init
+2 task init promise=1
+3 initial_suspend init
+3 initial_suspend await_ready
+3 initial_suspend await_suspend
+2 task await_ready
+2 task await_suspend
+3 initial_suspend await_resume
+3 initial_suspend destroy
+4 suspend_always init
+4 suspend_always await_ready
+4 suspend_always await_suspend
+0 executor resume count=0
+4 suspend_always await_resume
+4 suspend_always destroy
+5 suspend_always init
+5 suspend_always await_ready
+5 suspend_always await_suspend
+0 executor resume count=1
+5 suspend_always await_resume
+5 suspend_always destroy
+6 suspend_always init
+6 suspend_always await_ready
+6 suspend_always await_suspend
+0 executor resume count=2
+6 suspend_always await_resume
+6 suspend_always destroy
+7 final_suspend init
+7 final_suspend await_ready
+7 final_suspend await_suspend
+2 task await_resume
+2 task destroy
+7 final_suspend destroy
+1 promise destroy
+0 executor result=-1
+0 executor destroy
+)";

@@ -1,0 +1,91 @@
+R"(0 executor init
+1 promise init
+2 task init promise=1
+3 initial_suspend init
+3 initial_suspend await_ready
+3 initial_suspend await_suspend
+0 executor resume count=0
+3 initial_suspend await_resume
+3 initial_suspend destroy
+4 promise init
+5 task init promise=4
+6 initial_suspend init
+6 initial_suspend await_ready
+6 initial_suspend await_suspend
+5 task await_ready
+5 task await_suspend
+6 initial_suspend await_resume
+6 initial_suspend destroy
+7 final_suspend init
+7 final_suspend await_ready
+7 final_suspend await_suspend
+0 executor resume count=1
+5 task await_resume
+1 promise yield.move
+8 yield init.move
+8 yield await_ready
+8 yield await_suspend
+0 executor resume count=2
+8 yield await_resume
+8 yield destroy
+5 task destroy
+7 final_suspend destroy
+4 promise destroy
+9 promise init
+10 task init promise=9
+11 initial_suspend init
+11 initial_suspend await_ready
+11 initial_suspend await_suspend
+10 task await_ready
+10 task await_suspend
+11 initial_suspend await_resume
+11 initial_suspend destroy
+12 final_suspend init
+12 final_suspend await_ready
+12 final_suspend await_suspend
+0 executor resume count=3
+10 task await_resume
+1 promise yield.move
+13 yield init.move
+13 yield await_ready
+13 yield await_suspend
+0 executor resume count=4
+13 yield await_resume
+13 yield destroy
+10 task destroy
+12 final_suspend destroy
+9 promise destroy
+14 promise init
+15 task init promise=14
+16 initial_suspend init
+16 initial_suspend await_ready
+16 initial_suspend await_suspend
+15 task await_ready
+15 task await_suspend
+16 initial_suspend await_resume
+16 initial_suspend destroy
+17 final_suspend init
+17 final_suspend await_ready
+17 final_suspend await_suspend
+0 executor resume count=5
+15 task await_resume
+1 promise yield.move
+18 yield init.move
+18 yield await_ready
+18 yield await_suspend
+0 executor resume count=6
+18 yield await_resume
+18 yield destroy
+15 task destroy
+17 final_suspend destroy
+14 promise destroy
+19 final_suspend init
+19 final_suspend await_ready
+19 final_suspend await_suspend
+2 task await_resume
+2 task destroy
+19 final_suspend destroy
+1 promise destroy
+0 executor result=
+0 executor destroy
+)";

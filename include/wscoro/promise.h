@@ -5,47 +5,51 @@
 #include <optional>
 #include <exception>
 #include <atomic>
+#include <cstddef>
 
 namespace wscoro {
 
 namespace detail {
 
-// A type that suspends to the awaiter.
-template<bool Continuation, typename P>
-struct ReadySuspend;
+// Provides an await_ready that always suspends and an await_resume that does
+// nothing.
+struct SuspendBase {
+  constexpr bool await_ready() const noexcept { return false; }
+  constexpr void await_resume() const noexcept {}
+};
 
-// This is a continuation-supported promise awaiter. It always suspends and if
-// there is a pending continuation, resumes it.
+// Sync suspender.
+// Provides an empty await_suspend, equivalent to std::suspend_always, but
+// templated to the promise type for consistency/type safety.
+template<bool Async, typename P>
+struct Suspend : SuspendBase {
+  // Nothing to do here but return to the awaiter.
+  constexpr void await_suspend(std::coroutine_handle<P>) const noexcept {}
+};
+
+// Async suspender.
+// Provides an await_suspend that returns the continuation if one was present,
+// otherwise it simply returns to the awaiter.
 template<typename P>
-struct ReadySuspend<true, P> {
-  // Return false to always suspend at this point.
-  bool await_ready() const noexcept { return false; }
-
-  // If there was a continuation, return it to let the caller resume it.
-  // This is the last of the coroutine work.
+struct Suspend<true, P> : SuspendBase {
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<P> coroutine) const noexcept {
-    if (auto continuation = coroutine.promise()._continuation) {
-      coroutine.promise()._continuation = nullptr;
-      return continuation;
-    }
-    return std::noop_coroutine();
-  }
+    auto &promise = coroutine.promise();
+    auto continuation = promise._continuation;
 
-  // Last thing on the promise called - maybe should do cleanup here?
-  // Is this even called if I don't resume the suspend handle?
-  void await_resume() const noexcept {
-    log::debug("ReadySuspend<true>::await_resume");
+    if (continuation) {
+      promise._continuation = nullptr;
+    } else {
+      continuation = std::noop_coroutine();
+    }
+
+    return continuation;
   }
 };
 
-// If there is no continuation, all there is to do is just suspend to the
-// awaiter.
-template<typename P>
-struct ReadySuspend<false, P> : std::suspend_always {};
-
 // Behavior when an unhandled exception is thrown inside the coroutine.
-template<traits::ExceptionBehavior EB> struct PromiseUnhandledException;
+template<traits::ExceptionBehavior EB>
+struct PromiseUnhandledException;
 
 // Ignore exceptions. Good when exceptions are disabled or not needed.
 template<>
@@ -78,17 +82,17 @@ struct PromiseUnhandledException<traits::rethrow_exceptions> {
 
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
-template<typename T>
-struct PromiseDataBase {
+template<typename T, size_t Align = alignof(std::max_align_t)>
+struct alignas(Align) PromiseDataBase {
 private:
   union {
     T _data;
     unsigned char _cdata[sizeof(T)];
   };
-  std::atomic_flag _is_empty;
+  mutable std::atomic_flag _is_empty;
 
   void free_data() noexcept {
-    if (_is_empty.test_and_set() == false) {
+    if (_is_empty.test_and_set(std::memory_order_acq_rel) == false) {
       // _is_empty was false, is now true.
       _data.~T();
     }
@@ -96,8 +100,13 @@ private:
 
 public:
   PromiseDataBase() noexcept {
-    _is_empty.test_and_set();
+    _is_empty.test_and_set(std::memory_order_acq_rel);
   }
+
+  PromiseDataBase(PromiseDataBase &&) = delete;
+  PromiseDataBase(const PromiseDataBase &) = delete;
+  PromiseDataBase &operator=(PromiseDataBase &&) = delete;
+  PromiseDataBase &operator=(const PromiseDataBase &) = delete;
 
   ~PromiseDataBase() {
     free_data();
@@ -105,13 +114,9 @@ public:
 
   bool has_data() const noexcept {
 #if defined(__GNUC__) && !defined(__clang__)
-    // TODO: GCC doesn't have atomic_flag::test yet, making this not thread
-    // safe.
-    if (!const_cast<std::atomic_flag &>(_is_empty).test_and_set()) {
-      const_cast<std::atomic_flag &>(_is_empty).clear();
-      return false;
-    }
-    return true;
+    // TODO: GCC doesn't have atomic_flag::test yet, so here's a very hacky
+    // workaround.
+    return __atomic_load_n(&_is_empty._M_i, int(std::memory_order_acquire));
 #else
     return !_is_empty.test(std::memory_order_acquire);
 #endif
@@ -124,7 +129,7 @@ public:
   {
     free_data();
     new (&_data) T(data);
-    _is_empty.clear();
+    _is_empty.clear(std::memory_order_release);
     return _data;
   }
 
@@ -135,54 +140,41 @@ public:
   {
     free_data();
     new (&_data) T(std::move(data));
-    _is_empty.clear();
+    _is_empty.clear(std::memory_order_release);
     return _data;
   }
 
   // Returns a reference to the inner data or throws std::runtime_error if
   // the inner data was empty (clear flag was set).
   const T &data() const {
+#ifndef NDEBUG
     if (!has_data()) {
       throw std::runtime_error("Data was empty");
     }
+#endif
     return _data;
   }
 
   // Returns a reference to the inner data or throws std::runtime_error if
   // the inner data was empty (clear flag was set).
   T &data() {
+#ifndef NDEBUG
     if (!has_data()) {
       throw std::runtime_error("Data was empty");
     }
+#endif
     return _data;
   }
 
   // Returns a move reference to the inner data and marks the data empty.
   template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  T &&take_data() && {
-    if (_is_empty.test_and_set()) {
-      throw std::runtime_error("Data was empty");
-    }
-    return std::move(_data);
-  }
-
-  // Copies the inner data, frees the inner data, marks the data as empty,
-  // and returns the copy.
-  template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  T take_data() & {
-#if defined(__GNUC__) && !defined(__clang__)
-    if (_is_empty.test_and_set()) {
-      throw std::runtime_error("Data was empty");
-    }
-    _is_empty.clear();
-#else
-    if (_is_empty.test(std::memory_order_acquire)) {
+  T &&take_data() {
+#ifndef NDEBUG
+    if (_is_empty.test_and_set(std::memory_order_acq_rel)) {
       throw std::runtime_error("Data was empty");
     }
 #endif
-    T data{_data};
-    free_data();
-    return data;
+    return std::move(_data);
   }
 };
 
@@ -236,7 +228,7 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Move value into internal data where it will be moved out at
   // await_resume.
   template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  ReadySuspend<Async, P> yield_value(T &&value)
+  Suspend<Async, P> yield_value(T &&value)
     noexcept(std::is_nothrow_move_constructible_v<T>)
   {
     this->init_data(std::move(value));
@@ -246,7 +238,7 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Copy value into internal data where it will be moved/copied out at
   // await_resume.
   template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  ReadySuspend<Async, P> yield_value(const T &value)
+  Suspend<Async, P> yield_value(const T &value)
     noexcept(std::is_nothrow_copy_constructible_v<T>)
   {
     this->init_data(value);
@@ -272,11 +264,7 @@ struct PromiseAwaitTransform {};
 
 template<>
 struct PromiseAwaitTransform<false> {
-  template<typename T>
-  void await_transform(T&&) = delete;
-
-  template<typename T>
-  void await_transform(const T &) = delete;
+  void await_transform() = delete;
 };
 
 } // namespace detail
@@ -311,8 +299,9 @@ struct Promise :
   }
 
   // If inner await is supported and there is a pending continuation,
-  // it will be resumed here.
-  detail::ReadySuspend<Traits::is_async::value, typename TTask::promise_type>
+  // it will be resumed here. The coroutine will be destroyed at the end
+  // of await_suspend.
+  detail::Suspend<Traits::is_async::value, typename TTask::promise_type>
   final_suspend() const noexcept {
     log::trace("Promise::final_suspend");
     return {};
