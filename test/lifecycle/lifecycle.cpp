@@ -116,12 +116,7 @@ public:
     this->subname = std::move(subname);
   }
 
-  TraceLogger(TraceLogger &&o) noexcept
-    : state{}, name{std::move(o.name)}, subname{std::move(o.subname)}
-  {
-    s_counter.fetch_add(1, std::memory_order_acq_rel);
-    state = std::move(o.state);
-  }
+  TraceLogger(TraceLogger &&o) = default;
 
   TraceLogger(const TraceLogger &o)
     : state{}, name{o.name}, subname{o.subname}
@@ -130,10 +125,19 @@ public:
     state = o.state;
   }
 
-  TraceLogger &operator=(TraceLogger &&o) = default;
+  TraceLogger &operator=(TraceLogger &&o) noexcept {
+    s_counter.fetch_sub(1, std::memory_order_acq_rel);
+    state = std::move(o.state);
+    return *this;
+  }
+
   TraceLogger &operator=(const TraceLogger &) = default;
 
   ~TraceLogger() {
+    if (!state) {
+      // got moved out
+      return;
+    }
     // use seq_cst here b/c the dependency on 2 different atomic variables.
     int destroy_counter = ++s_destroy_counter;
     int counter = s_counter.load();
@@ -145,6 +149,10 @@ public:
       s_counter.fetch_sub(counter, std::memory_order_relaxed);
       s_destroy_counter.fetch_sub(counter, std::memory_order_relaxed);
     }
+  }
+
+  operator bool() const noexcept {
+    return (bool)state;
   }
 
   template<typename ...Args>
@@ -190,7 +198,7 @@ struct TraceAwait : private T {
   }
 
   ~TraceAwait() {
-    logger("destroy");
+    if (logger) logger("destroy");
   }
 
   bool await_ready() noexcept(noexcept(this->T::await_ready())) {
@@ -264,13 +272,14 @@ public:
     logger("init promise={}", coroutine.promise().logger.name);
   }
 
-  Trace(const Trace &) = delete;
-  Trace &operator=(const Trace &) = delete;
   Trace(Trace &&) = default;
   Trace &operator=(Trace &&) = default;
 
+  Trace(const Trace &) = delete;
+  Trace &operator=(const Trace &) = delete;
+
   ~Trace() {
-    logger("destroy");
+    if (logger) logger("destroy");
   }
 
   bool await_ready() const
@@ -361,7 +370,7 @@ public:
 };
 
 //
-// }}} Test infrastructure 
+// }}} Test infrastructure
 //
 // ---------------------------------------------------------------------------
 //
