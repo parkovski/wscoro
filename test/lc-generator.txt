@@ -41,6 +41,7 @@ R"(0 executor init
 7 final_suspend init
 7 final_suspend await_ready
 7 final_suspend await_suspend
+2 task await_resume
 0 executor generator done
 2 task destroy
 7 final_suspend destroy

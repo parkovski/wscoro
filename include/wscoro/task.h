@@ -50,6 +50,7 @@ public:
   constexpr BasicTask &operator=(BasicTask &&o) noexcept {
     _coroutine = o._coroutine;
     o._coroutine = nullptr;
+    return *this;
   }
 
   BasicTask(const BasicTask &) = delete;
@@ -68,6 +69,10 @@ public:
 
   bool done() const {
     return !_coroutine || _coroutine.done();
+  }
+
+  explicit operator bool() const noexcept {
+    return _coroutine != nullptr;
   }
 
   // Calling this when you're not supposed to will break things.
@@ -101,21 +106,23 @@ public:
     if constexpr (!Traits::is_async::value) {
       resume();
       return continuation;
-      // TODO: The following line should work but LLVM's await_ready is not
-      // constexpr.
-    // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
-    } else if constexpr (
-        std::is_convertible_v<typename Traits::initial_suspend_type,
-                              std::suspend_never>) {
-      // If there is no initial suspend, the coroutine starts
-      // automatically, so we should not resume it at an arbitrary location.
+    } else {
       assert(!_coroutine.promise()._continuation);
       _coroutine.promise()._continuation = continuation;
-      return std::noop_coroutine();
-    } else {
-      // If there is an initial suspend, await is the mechanism to start the
-      // coroutine.
-      return _coroutine;
+      // TODO: The following line should work but LLVM's await_ready is not
+      // constexpr.
+      // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
+      if constexpr (
+        std::is_convertible_v<typename Traits::initial_suspend_type,
+                              std::suspend_never>) {
+        // If there is no initial suspend, the coroutine starts
+        // automatically, so we should not resume it at an arbitrary location.
+        return std::noop_coroutine();
+      } else {
+        // If there is an initial suspend, await is the mechanism to start the
+        // coroutine.
+        return _coroutine;
+      }
     }
   }
 
@@ -124,7 +131,7 @@ public:
   // this returns the value from the inner coroutine's co_return.
   // If the type is configured to copy instead of move, the data is not
   // consumed.
-  T await_resume() {
+  decltype(auto) await_resume() {
     if constexpr (std::is_same_v<typename Traits::exception_behavior,
                                  traits::handle_exceptions>)
     {
@@ -134,12 +141,24 @@ public:
       }
     }
 
-    if constexpr (std::is_void_v<T>) {
-      return;
-    } else if constexpr (Traits::move_result::value) {
-      return std::move(_coroutine.promise()).take_data();
+    if constexpr (Traits::is_generator::value) {
+      // Generators return optional<T>, nullopt at the end.
+      if (_coroutine.done()) {
+        return std::optional<T>{};
+      } else if constexpr (Traits::move_result::value) {
+        return std::optional<T>{std::in_place,
+                                std::move(_coroutine.promise()).data()};
+      } else {
+        return std::optional<T>{std::in_place, _coroutine.promise().data()};
+      }
     } else {
-      return _coroutine.promise().data();
+      if constexpr (std::is_void_v<T>) {
+        return;
+      } else if constexpr (Traits::move_result::value) {
+        return T{std::move(_coroutine.promise()).data()};
+      } else {
+        return T{_coroutine.promise().data()};
+      }
     }
   }
 };

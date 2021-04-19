@@ -91,6 +91,7 @@ private:
   };
   mutable std::atomic_flag _is_empty;
 
+protected:
   void free_data() noexcept {
     if (_is_empty.test_and_set(std::memory_order_acq_rel) == false) {
       // _is_empty was false, is now true.
@@ -122,21 +123,11 @@ public:
 #endif
   }
 
-  // Copy constructor equivalent for inner data.
-  template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  T &init_data(const T &data)
-    noexcept(std::is_nothrow_copy_constructible_v<T>)
-  {
-    free_data();
-    new (&_data) T(data);
-    _is_empty.clear(std::memory_order_release);
-    return _data;
-  }
-
   // Move constructor equivalent for inner data.
-  template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  T &init_data(T &&data)
-    noexcept(std::is_nothrow_move_constructible_v<T>)
+  template<typename U = T>
+  T &init_data(
+    std::enable_if_t<std::is_move_constructible_v<U>, T> &&data
+  ) noexcept(std::is_nothrow_move_constructible_v<U>)
   {
     free_data();
     new (&_data) T(std::move(data));
@@ -144,9 +135,21 @@ public:
     return _data;
   }
 
+  // Copy constructor equivalent for inner data.
+  template<typename U = T>
+  T &init_data(
+    std::enable_if_t<std::is_copy_constructible_v<U>, T> const &data
+  ) noexcept(std::is_nothrow_copy_constructible_v<U>)
+  {
+    free_data();
+    new (&_data) T(data);
+    _is_empty.clear(std::memory_order_release);
+    return _data;
+  }
+
   // Returns a reference to the inner data or throws std::runtime_error if
   // the inner data was empty (clear flag was set).
-  const T &data() const {
+  const T &data() const & {
 #ifndef NDEBUG
     if (!has_data()) {
       throw std::runtime_error("Data was empty");
@@ -157,7 +160,7 @@ public:
 
   // Returns a reference to the inner data or throws std::runtime_error if
   // the inner data was empty (clear flag was set).
-  T &data() {
+  T &data() & {
 #ifndef NDEBUG
     if (!has_data()) {
       throw std::runtime_error("Data was empty");
@@ -166,9 +169,8 @@ public:
     return _data;
   }
 
-  // Returns a move reference to the inner data and marks the data empty.
-  template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  T &&take_data() {
+  // Consumes and returns the inner data by move constructor.
+  T data() && {
 #ifndef NDEBUG
     if (_is_empty.test_and_set(std::memory_order_acq_rel)) {
       throw std::runtime_error("Data was empty");
@@ -194,16 +196,18 @@ struct PromiseData<P, void, Async, false> {
 // initialized exactly once. Requires a move/copy constructor.
 template<typename P, typename T, bool Async>
 struct PromiseData<P, T, Async, false> : PromiseDataBase<T> {
-  template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  void return_value(T &&value)
-    noexcept(std::is_nothrow_move_constructible_v<T>)
+  template<typename U = T>
+  void return_value(
+    std::enable_if_t<std::is_move_constructible_v<U>, T> &&value
+  ) noexcept(std::is_nothrow_move_constructible_v<U>)
   {
     this->init_data(std::move(value));
   }
 
-  template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  void return_value(const T &value)
-    noexcept(std::is_nothrow_copy_constructible_v<T>)
+  template<typename U = T>
+  void return_value(
+    std::enable_if_t<std::is_copy_constructible_v<U>, T> const &value
+  ) noexcept(std::is_nothrow_copy_constructible_v<U>)
   {
     this->init_data(value);
   }
@@ -212,24 +216,18 @@ struct PromiseData<P, T, Async, false> : PromiseDataBase<T> {
 // A type with yield support may "return" multiple times.
 template<typename P, typename T, bool Async>
 struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
-  // Generators can't return a value. This discards the current continuation
-  // if one exists as an await on this type expects a value via yield.
+  // Generators can't return a value at the end - make sure the data is empty
+  // so it returns nullopt.
   void return_void() noexcept {
-    if constexpr (Async) {
-      auto promise = static_cast<P *>(this);
-      if (auto continuation = promise->_continuation) {
-        promise->_continuation = nullptr;
-        continuation.destroy();
-        log::warn("Generator finished and discarded its continuation.");
-      }
-    }
+    this->free_data();
   }
 
   // Move value into internal data where it will be moved out at
   // await_resume.
-  template<typename = std::enable_if_t<std::is_move_constructible_v<T>>>
-  Suspend<Async, P> yield_value(T &&value)
-    noexcept(std::is_nothrow_move_constructible_v<T>)
+  template<typename U = T>
+  Suspend<Async, P> yield_value(
+    std::enable_if_t<std::is_move_constructible_v<U>, T> &&value
+  ) noexcept(std::is_nothrow_move_constructible_v<U>)
   {
     this->init_data(std::move(value));
     return {};
@@ -237,9 +235,10 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
 
   // Copy value into internal data where it will be moved/copied out at
   // await_resume.
-  template<typename = std::enable_if_t<std::is_copy_constructible_v<T>>>
-  Suspend<Async, P> yield_value(const T &value)
-    noexcept(std::is_nothrow_copy_constructible_v<T>)
+  template<typename U = T>
+  Suspend<Async, P> yield_value(
+    std::enable_if_t<std::is_copy_constructible_v<U>, T> const &value
+  ) noexcept(std::is_nothrow_copy_constructible_v<U>)
   {
     this->init_data(value);
     return {};
@@ -307,24 +306,5 @@ struct Promise :
     return {};
   }
 };
-
-namespace detail {
-  template<typename TTask, typename TTaskBase>
-  struct PromiseFor;
-
-  template<
-    typename TTask,
-    template<typename, CoroutineTraits> typename TTaskBase,
-    typename TData,
-    CoroutineTraits Traits
-  >
-  struct PromiseFor<TTask, TTaskBase<TData, Traits>> {
-    using type = Promise<TTask, TData, Traits>;
-  };
-}
-
-// Create a promise type for a task that extends TaskBase.
-template<typename TTask, typename TTaskBase>
-using PromiseFor = typename detail::PromiseFor<TTask, TTaskBase>::type;
 
 } // namespace wscoro

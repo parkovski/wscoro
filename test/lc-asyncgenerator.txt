@@ -4,7 +4,8 @@ R"(0 executor init
 3 initial_suspend init
 3 initial_suspend await_ready
 3 initial_suspend await_suspend
-0 executor resume count=0
+2 task await_ready
+2 task await_suspend
 3 initial_suspend await_resume
 3 initial_suspend destroy
 4 promise init
@@ -19,13 +20,15 @@ R"(0 executor init
 7 final_suspend init
 7 final_suspend await_ready
 7 final_suspend await_suspend
-0 executor resume count=1
 5 task await_resume
-1 promise yield.move
+1 promise yield.copy
 8 yield init.move
 8 yield await_ready
 8 yield await_suspend
-0 executor resume count=2
+2 task await_resume
+0 executor generator yield
+2 task await_ready
+2 task await_suspend
 8 yield await_resume
 8 yield destroy
 5 task destroy
@@ -43,13 +46,15 @@ R"(0 executor init
 12 final_suspend init
 12 final_suspend await_ready
 12 final_suspend await_suspend
-0 executor resume count=3
 10 task await_resume
-1 promise yield.move
+1 promise yield.copy
 13 yield init.move
 13 yield await_ready
 13 yield await_suspend
-0 executor resume count=4
+2 task await_resume
+0 executor generator yield
+2 task await_ready
+2 task await_suspend
 13 yield await_resume
 13 yield destroy
 10 task destroy
@@ -67,13 +72,15 @@ R"(0 executor init
 17 final_suspend init
 17 final_suspend await_ready
 17 final_suspend await_suspend
-0 executor resume count=5
 15 task await_resume
-1 promise yield.move
+1 promise yield.copy
 18 yield init.move
 18 yield await_ready
 18 yield await_suspend
-0 executor resume count=6
+2 task await_resume
+0 executor generator yield
+2 task await_ready
+2 task await_suspend
 18 yield await_resume
 18 yield destroy
 15 task destroy
@@ -83,9 +90,10 @@ R"(0 executor init
 19 final_suspend await_ready
 19 final_suspend await_suspend
 2 task await_resume
+0 executor generator done
 2 task destroy
 19 final_suspend destroy
 1 promise destroy
-0 executor result=
+0 executor result=-1 -2 -3
 0 executor destroy
 )";

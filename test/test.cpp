@@ -11,7 +11,7 @@ struct DestroyLogger {
 };
 
 int main(int argc, char *argv[]) {
-  g_logger = spdlog::stdout_color_mt("wscoro");
+  g_logger = spdlog::stderr_color_mt("wscoro");
   DestroyLogger destroy_logger;
 
   g_logger->info("Starting Catch session.");

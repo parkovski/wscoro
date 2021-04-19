@@ -84,7 +84,7 @@ static Generator<int> fibonacci() {
 static AsyncGenerator<int> async_fib() {
   auto fib = fibonacci();
   while (true) {
-    co_yield co_await fib;
+    co_yield *co_await fib;
   }
 }
 
@@ -93,28 +93,27 @@ static AutoTask<std::string> get_seq(G generator, int rounds) {
   std::stringstream ss;
   if (rounds > 0) {
     for (int i = 0; i < rounds - 1; i++) {
-      ss << co_await generator << " ";
+      ss << *std::move(co_await generator) << " ";
     }
-    ss << co_await generator;
+    ss << *co_await generator;
   }
   co_return std::move(ss).str();
 }
 
 TEST_CASE("Fibonacci generator (not called)", "[task]") {
   auto fib_seq = get_seq(fibonacci(), 0);
-  REQUIRE(fib_seq.done());
-  REQUIRE(fib_seq.await_resume() == "");
+  CHECK(fib_seq.await_ready()); REQUIRE(fib_seq.await_resume() == "");
 }
 
 TEST_CASE("Fibonacci generator (called once)", "[task]") {
   auto fib_seq = get_seq(fibonacci(), 1);
-  REQUIRE(fib_seq.done());
+  CHECK(fib_seq.await_ready());
   REQUIRE(fib_seq.await_resume() == "1");
 }
 
 TEST_CASE("Fibonacci generator", "[task]") {
   auto fib_seq = get_seq(fibonacci(), 7);
-  REQUIRE(fib_seq.done());
+  CHECK(fib_seq.await_ready());
   REQUIRE(fib_seq.await_resume() == "1 1 2 3 5 8 13");
 }
 
@@ -124,26 +123,26 @@ TEST_CASE("Fibonacci without co_await", "[task]") {
 
   for (int i = 0; i < sizeof(seq)/sizeof(seq[0]); ++i) {
     fib.resume();
-    REQUIRE(!fib.done());
+    CHECK(!fib.done());
     REQUIRE(fib.await_resume() == seq[i]);
   }
 }
 
 TEST_CASE("Async generator (not called)", "[task]") {
   auto fib_seq = get_seq(async_fib(), 0);
-  REQUIRE(fib_seq.done());
+  CHECK(fib_seq.await_ready());
   REQUIRE(fib_seq.await_resume() == "");
 }
 
 TEST_CASE("Async generator (called once)", "[task]") {
   auto fib_seq = get_seq(async_fib(), 1);
-  REQUIRE(fib_seq.done());
+  CHECK(fib_seq.await_ready());
   REQUIRE(fib_seq.await_resume() == "1");
 }
 
 TEST_CASE("Async generator", "[task]") {
   auto fib_seq = get_seq(async_fib(), 7);
-  REQUIRE(fib_seq.done());
+  CHECK(fib_seq.await_ready());
   REQUIRE(fib_seq.await_resume() == "1 1 2 3 5 8 13");
 }
 
@@ -155,22 +154,22 @@ TaskB suspend_b(std::stringstream &s) {
 }
 
 template<typename TaskA, typename TaskB>
-TaskA suspend_a(std::stringstream &s, TaskB **task_b) {
+TaskA suspend_a(std::stringstream &s, TaskB &b) {
   s << "A0";
-  auto b = suspend_b<TaskB>(s);
-  *task_b = &b;
+  b = suspend_b<TaskB>(s);
   s << ", A1]";
   co_await b;
   s << ", [A2";
 }
 
+// dosn't get the continuation
 template<typename TaskA, typename TaskB>
-void test_suspend_step(TaskA &ta, int sa, TaskB **tb, int sb,
+void test_suspend_step(TaskA &ta, int sa, TaskB &tb, int sb,
                        std::stringstream &s) {
-  const auto loop = [&s](auto &t, int st, int su, auto a_done) {
+  const auto loop = [&s](auto &t, int st, auto a_done) {
     bool a_once = false;
     for (int i = 0; i < st; ++i) {
-      REQUIRE(!t.done());
+      CHECK(!t.done());
       t.resume();
       if (a_done() && !a_once) {
         a_once = true;
@@ -179,25 +178,26 @@ void test_suspend_step(TaskA &ta, int sa, TaskB **tb, int sb,
     }
   };
 
-  loop(ta, sa, sb, [] { return false; });
-  if (tb && *tb) {
+  loop(ta, sa, [] { return false; });
+  if (tb) {
     s << ", B: [";
-    loop(**tb, sb, 0, [&] { return ta.done(); });
-    REQUIRE((**tb).done());
+    loop(tb, sb, [&] { return ta.done(); });
+    CHECK(tb.done());
     s << ", BF]";
   } else if (sb > 0) {
-    FAIL("expected task tb with " << sb << " suspensions");
+    FAIL_CHECK("expected task tb with " << sb << " suspensions");
   }
-  REQUIRE(ta.done());
+  CHECK(ta.done());
 }
 
 template<typename TaskA, typename TaskB>
 void test_suspend(int steps_a, int steps_b, const char *expected) {
   std::stringstream s;
-  TaskB *b = nullptr;
+  // Extend the lifetime of this task so we can verify when it finishes.
+  TaskB b{nullptr};
   s << "A: [";
-  auto a = suspend_a<TaskA, TaskB>(s, &b);
-  test_suspend_step(a, steps_a, &b, steps_b, s);
+  auto a = suspend_a<TaskA, TaskB>(s, b);
+  test_suspend_step(a, steps_a, b, steps_b, s);
   REQUIRE(s.str() == expected);
 }
 

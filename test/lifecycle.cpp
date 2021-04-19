@@ -282,7 +282,7 @@ public:
     return this->base::await_ready();
   }
 
-  std::coroutine_handle<>
+  decltype(auto)
   await_suspend(std::coroutine_handle<> continuation)
     noexcept(AwaitSuspendNoexcept<base>)
   {
@@ -296,7 +296,7 @@ public:
     }
   }
 
-  typename base::value_type
+  decltype(auto)
   await_resume()
     noexcept(
       std::is_nothrow_invocable_v<decltype(&base::await_resume), base &>
@@ -351,7 +351,7 @@ public:
 
     template<typename U = T>
     decltype(auto)
-    yield_value(const std::enable_if_t<!std::is_void_v<U>, T> &value)
+    yield_value(std::enable_if_t<!std::is_void_v<U>, T> const &value)
       noexcept(noexcept(static_cast<base *>(this)->yield_value(value)))
     {
       logger("yield.copy");
@@ -398,19 +398,15 @@ std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
 
       if constexpr (TaskT::is_generator::value) {
         // FIXME - generator optional
-        // if (auto r = task.await_resume(); r.has_value()) {
-        //   if (result.length()) result += " ";
-        //   result += std::to_string(r.value());
-        // }
-        if (task.done()) {
+        if (auto r = task.await_resume(); r.has_value()) {
+          scope.logger("generator yield");
+          if (result.length()) result += " ";
+          result += std::to_string(*r);
+        } else {
+          CHECK(task.done());
           scope.logger("generator done");
           break;
         }
-        if (result.length()) {
-          result += " ";
-        }
-        result += std::to_string(task.await_resume());
-        scope.logger("generator yield");
       } else {
         CHECK(task.done());
         result = std::to_string(task.await_resume());
