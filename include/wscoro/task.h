@@ -1,6 +1,6 @@
 #pragma once
 
-#include "tasktraits.h"
+#include "traits.h"
 #include "promise.h"
 
 #include <typeinfo>
