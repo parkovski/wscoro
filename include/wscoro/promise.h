@@ -117,7 +117,7 @@ public:
 #if defined(__GNUC__) && !defined(__clang__)
     // TODO: GCC doesn't have atomic_flag::test yet, so here's a very hacky
     // workaround.
-    return __atomic_load_n(&_is_empty._M_i, int(std::memory_order_acquire));
+    return !__atomic_load_n(&_is_empty._M_i, int(std::memory_order_acquire));
 #else
     return !_is_empty.test(std::memory_order_acquire);
 #endif
