@@ -7,14 +7,13 @@
 
 namespace wscoro {
 
-template<typename T>
-concept Coroutine = requires(T t) {
-  { const_cast<const T &>(t).done() } -> std::same_as<bool>;
-  { t.resume() };
-  { t.destroy() };
-};
-
 template<typename T, CoroutineTraits Traits>
+requires
+  // A generator cannot yield void.
+  (!std::is_void_v<T> || !Traits::is_generator::value) &&
+  // A type with async=false and awaiter=true must return void since it
+  // can't be reliably awaited.
+  (Traits::is_async::value || !Traits::is_awaiter::value || std::is_void_v<T>)
 class BasicTask {
 public:
   // 
