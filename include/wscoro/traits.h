@@ -31,7 +31,7 @@ concept AwaitSuspendReturn =
 // Any type that specifies these options is usable as traits for a Task.
 // Note: gcc missing convertible_to.
 template<typename T>
-concept CoroutineTraits = requires (typename T::initial_suspend_type is) {
+concept BasicTaskTraits = requires (typename T::initial_suspend_type is) {
   { (bool)typename T::is_generator{} };
   { (bool)typename T::is_awaiter{} };
   { (bool)typename T::is_async{} };
@@ -165,7 +165,7 @@ struct FireAndForgetTraits {
 };
 
 // Traits that change the struct to copy from the result data instead of move.
-template<CoroutineTraits CT>
+template<BasicTaskTraits CT>
 struct CopyResultTraits {
   using is_generator         = typename CT::is_generator;
   using is_async             = typename CT::is_async;
@@ -176,7 +176,3 @@ struct CopyResultTraits {
 };
 
 } // namespace wscoro::traits
-
-namespace wscoro {
-  using traits::CoroutineTraits;
-}

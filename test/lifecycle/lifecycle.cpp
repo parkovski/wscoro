@@ -240,12 +240,12 @@ struct TraceAwait : private T {
 template<typename T>
 TraceAwait(std::string, T &&) -> TraceAwait<T>;
 
-template<CoroutineTraits T>
+template<traits::BasicTaskTraits T>
 struct Trace<T> : public T {
   using initial_suspend_type = TraceAwait<std::suspend_never>;
 };
 
-template<typename T, CoroutineTraits Traits>
+template<typename T, traits::BasicTaskTraits Traits>
 struct Trace<BasicTask<T, Traits>> : public BasicTask<T, Trace<Traits>> {
   TraceLogger logger;
 

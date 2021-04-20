@@ -7,7 +7,7 @@
 
 namespace wscoro {
 
-template<typename T, CoroutineTraits Traits>
+template<typename T, traits::BasicTaskTraits Traits>
 requires
   // A generator cannot yield void.
   (!std::is_void_v<T> || !Traits::is_generator::value) &&
@@ -185,7 +185,7 @@ using FireAndForget = BasicTask<void, traits::FireAndForgetTraits>;
 // -----
 
 // A copy task copies the result data instead of moving.
-template<typename T, CoroutineTraits Traits,
+template<typename T, traits::BasicTaskTraits Traits,
          typename = std::enable_if_t<!std::is_void_v<T>>>
 using BasicCopyTask = BasicTask<T, traits::CopyResultTraits<Traits>>;
 
@@ -210,7 +210,7 @@ using CopyAsyncGenerator = BasicCopyTask<T, traits::AsyncGeneratorTraits>;
 } // namespace wscoro
 
 namespace std {
-  template<typename T, ::wscoro::CoroutineTraits Traits>
+  template<typename T, ::wscoro::traits::BasicTaskTraits Traits>
   struct hash<::wscoro::BasicTask<T, Traits>> {
     auto operator()(const ::wscoro::BasicTask<T, Traits> &task) const noexcept {
       return hash<remove_cvref_t<decltype(task._coroutine)>>{}(task._coroutine);

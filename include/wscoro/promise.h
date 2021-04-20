@@ -324,7 +324,7 @@ struct PromiseAwaitTransform<false> {
 
 } // namespace detail
 
-template<typename TaskT, typename T, CoroutineTraits Traits>
+template<typename TaskT, typename T, traits::BasicTaskTraits Traits>
 struct Promise :
   detail::PromiseBase<T, typename TaskT::promise_type,
                       typename Traits::initial_suspend_type,
