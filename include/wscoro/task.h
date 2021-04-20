@@ -92,7 +92,7 @@ public:
       return true;
     }
     if constexpr (Traits::is_generator::value) {
-      return _coroutine.promise().has_data();
+      return _coroutine.promise().has_value();
     } else {
       return false;
     }

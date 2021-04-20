@@ -47,43 +47,10 @@ struct Suspend<true, P> : SuspendBase {
   }
 };
 
-// Behavior when an unhandled exception is thrown inside the coroutine.
-template<traits::ExceptionBehavior EB>
-struct PromiseUnhandledException;
-
-// Ignore exceptions. Good when exceptions are disabled or not needed.
-template<>
-struct PromiseUnhandledException<traits::ignore_exceptions> {
-  void unhandled_exception() const noexcept {}
-};
-
-// Handle exceptions - save an std::exception_ptr to be rethrown when control
-// is yielded back to the awaiter of the coroutine. Good when the coroutine
-// is asynchronous.
-template<>
-struct PromiseUnhandledException<traits::handle_exceptions> {
-  std::exception_ptr _exception{};
-
-  void unhandled_exception() noexcept {
-    auto ex = std::current_exception();
-    log::warn("unhandled_exception: stored exception pointer.");
-    this->_exception = ex;
-  }
-};
-
-// Rethrow exceptions - immediately rethrow unhandled exceptions. Good when
-// the coroutine is synchronous.
-template<>
-struct PromiseUnhandledException<traits::rethrow_exceptions> {
-  [[noreturn]] void unhandled_exception() const {
-    std::rethrow_exception(std::current_exception());
-  }
-};
-
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
 template<typename T, size_t Align = alignof(std::max_align_t)>
-struct alignas(Align) PromiseDataBase {
+struct alignas(Align) PromiseData {
 private:
   union {
     T _data;
@@ -100,20 +67,20 @@ protected:
   }
 
 public:
-  PromiseDataBase() noexcept {
+  PromiseData() noexcept {
     _is_empty.test_and_set(std::memory_order_acq_rel);
   }
 
-  PromiseDataBase(PromiseDataBase &&) = delete;
-  PromiseDataBase(const PromiseDataBase &) = delete;
-  PromiseDataBase &operator=(PromiseDataBase &&) = delete;
-  PromiseDataBase &operator=(const PromiseDataBase &) = delete;
+  PromiseData(PromiseData &&) = delete;
+  PromiseData(const PromiseData &) = delete;
+  PromiseData &operator=(PromiseData &&) = delete;
+  PromiseData &operator=(const PromiseData &) = delete;
 
-  ~PromiseDataBase() {
+  ~PromiseData() {
     free_data();
   }
 
-  bool has_data() const noexcept {
+  bool has_value() const noexcept {
 #if defined(__GNUC__) && !defined(__clang__)
     // TODO: GCC doesn't have atomic_flag::test yet, so here's a very hacky
     // workaround.
@@ -151,7 +118,7 @@ public:
   // the inner data was empty (clear flag was set).
   const T &data() const & {
 #ifndef NDEBUG
-    if (!has_data()) {
+    if (!has_value()) {
       throw std::runtime_error("Data was empty");
     }
 #endif
@@ -162,7 +129,7 @@ public:
   // the inner data was empty (clear flag was set).
   T &data() & {
 #ifndef NDEBUG
-    if (!has_data()) {
+    if (!has_value()) {
       throw std::runtime_error("Data was empty");
     }
 #endif
@@ -180,22 +147,57 @@ public:
   }
 };
 
-// For a promise that returns data, this struct stores that data and enables
-// the return_value function. For a void promise, this enables the
-// return_void function.
-template<typename P, typename T, bool Async, bool Yield>
-struct PromiseData;
-
-// The promise returns void. Yield is not available for void returns.
-template<typename P, bool Async>
-struct PromiseData<P, void, Async, false> {
-  void return_void() const noexcept {}
+template<size_t Align>
+struct PromiseData<void, Align> {
+  constexpr bool has_value() const noexcept {
+    return false;
+  }
+  void data() const noexcept {}
 };
 
-// A type that has data but does not support yield requires the data be
-// initialized exactly once. Requires a move/copy constructor.
-template<typename P, typename T, bool Async>
-struct PromiseData<P, T, Async, false> : PromiseDataBase<T> {
+template<class T, class P, class I>
+struct SyncPromiseBase : detail::PromiseData<T> {
+  constexpr static bool async = false;
+
+  using suspend_type = Suspend<false, P>;
+
+  I initial_suspend() const noexcept {
+    return {};
+  }
+
+  suspend_type final_suspend() const noexcept {
+    return {};
+  }
+};
+
+template<class T, class P, class I>
+struct AsyncPromiseBase : detail::PromiseData<T> {
+  constexpr static bool async = true;
+
+  using suspend_type = Suspend<true, P>;
+
+  std::coroutine_handle<> _continuation{};
+
+  ~AsyncPromiseBase() {
+    if (_continuation) {
+      _continuation.destroy();
+    }
+  }
+
+  I initial_suspend() const noexcept {
+    return {};
+  }
+
+  suspend_type final_suspend() const noexcept {
+    return {};
+  }
+};
+
+template<class Base>
+struct ValuePromiseBase;
+
+template<template<class, class, class> class Base, class T, class P, class I>
+struct ValuePromiseBase<Base<T, P, I>> : Base<T, P, I> {
   template<typename U = T>
   void return_value(
     std::enable_if_t<std::is_move_constructible_v<U>, T> &&value
@@ -213,19 +215,26 @@ struct PromiseData<P, T, Async, false> : PromiseDataBase<T> {
   }
 };
 
-// A type with yield support may "return" multiple times.
-template<typename P, typename T, bool Async>
-struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
-  // Generators can't return a value at the end - make sure the data is empty
-  // so it returns nullopt.
-  void return_void() noexcept {
-    this->free_data();
-  }
+template<template<class, class, class> class Base, class P, class I>
+struct ValuePromiseBase<Base<void, P, I>> : Base<void, P, I> {
+  constexpr void return_void() const noexcept {}
+};
+
+template<class Base>
+struct GeneratorPromiseBase;
+
+template<template<class, class, class> class Base, class T, class P, class I>
+struct GeneratorPromiseBase<Base<T, P, I>> : Base<T, P, I> {
+  using base = Base<T, P, I>;
+  using suspend_type = typename base::suspend_type;
+
+  constexpr void return_void() const noexcept {}
 
   // Move value into internal data where it will be moved out at
   // await_resume.
   template<typename U = T>
-  Suspend<Async, P> yield_value(
+  suspend_type
+  yield_value(
     std::enable_if_t<std::is_move_constructible_v<U>, T> &&value
   ) noexcept(std::is_nothrow_move_constructible_v<U>)
   {
@@ -236,7 +245,8 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   // Copy value into internal data where it will be moved/copied out at
   // await_resume.
   template<typename U = T>
-  Suspend<Async, P> yield_value(
+  suspend_type
+  yield_value(
     std::enable_if_t<std::is_copy_constructible_v<U>, T> const &value
   ) noexcept(std::is_nothrow_copy_constructible_v<U>)
   {
@@ -245,20 +255,66 @@ struct PromiseData<P, T, Async, true> : PromiseDataBase<T> {
   }
 };
 
-// If Enable is true, contains a continuation handle.
-template<bool Enable> struct PromiseContinuation;
-template<> struct PromiseContinuation<false> {};
-template<> struct PromiseContinuation<true> {
-  std::coroutine_handle<> _continuation{};
+template<class T, class P, class I, bool Generator, bool Async>
+struct PromiseBaseT;
 
-  ~PromiseContinuation() {
-    if (_continuation) {
-      _continuation.destroy();
-    }
+template<class T, class P, class I>
+struct PromiseBaseT<T, P, I, false, false> {
+  using type = ValuePromiseBase<SyncPromiseBase<T, P, I>>;
+};
+
+template<class T, class P, class I>
+struct PromiseBaseT<T, P, I, false, true> {
+  using type = ValuePromiseBase<AsyncPromiseBase<T, P, I>>;
+};
+
+template<class T, class P, class I>
+struct PromiseBaseT<T, P, I, true, false> {
+  using type = GeneratorPromiseBase<SyncPromiseBase<T, P, I>>;
+};
+
+template<class T, class P, class I>
+struct PromiseBaseT<T, P, I, true, true> {
+  using type = GeneratorPromiseBase<AsyncPromiseBase<T, P, I>>;
+};
+
+template<class T, class P, class I, bool Generator, bool Async>
+using PromiseBase = typename PromiseBaseT<T, P, I, Generator, Async>::type;
+
+// Behavior when an unhandled exception is thrown inside the coroutine.
+template<traits::ExceptionBehavior EB>
+struct PromiseUnhandledException;
+
+// Ignore exceptions. Good when exceptions are disabled or not needed.
+template<>
+struct PromiseUnhandledException<traits::ignore_exceptions> {
+  void unhandled_exception() const noexcept {}
+};
+
+// Handle exceptions - save an std::exception_ptr to be rethrown when control
+// is yielded back to the awaiter of the coroutine. Good when the coroutine
+// is asynchronous.
+template<>
+struct PromiseUnhandledException<traits::handle_exceptions> {
+  std::exception_ptr _exception{};
+
+  void unhandled_exception() noexcept {
+    auto ex = std::current_exception();
+    log::warn("unhandled_exception: stored exception pointer.");
+    this->_exception = ex;
   }
 };
 
-template<bool SupportsInnerAwait>
+// Rethrow exceptions - immediately rethrow unhandled exceptions. Good when
+// the coroutine is synchronous.
+template<>
+struct PromiseUnhandledException<traits::rethrow_exceptions> {
+  [[noreturn]] void unhandled_exception() const {
+    std::rethrow_exception(std::current_exception());
+  }
+};
+
+template<bool Awaiter>
 struct PromiseAwaitTransform {};
 
 template<>
@@ -268,42 +324,22 @@ struct PromiseAwaitTransform<false> {
 
 } // namespace detail
 
-template<typename TTask, typename TData, CoroutineTraits Traits>
+template<typename TaskT, typename T, CoroutineTraits Traits>
 struct Promise :
-  detail::PromiseData<
-    typename TTask::promise_type,
-    TData,
-    Traits::is_async::value,
-    Traits::is_generator::value
-  >,
-  detail::PromiseContinuation<typename Traits::is_async {}>,
+  detail::PromiseBase<T, typename TaskT::promise_type,
+                      typename Traits::initial_suspend_type,
+                      Traits::is_generator::value, Traits::is_async::value>,
   detail::PromiseUnhandledException<typename Traits::exception_behavior>,
-  detail::PromiseAwaitTransform<typename Traits::is_awaiter {}>
+  detail::PromiseAwaitTransform<Traits::is_awaiter::value>
 {
-  TTask get_return_object()
+  TaskT get_return_object()
     noexcept(std::is_nothrow_constructible_v<
-      TTask, std::coroutine_handle<typename TTask::promise_type>>)
+      TaskT, std::coroutine_handle<typename TaskT::promise_type>>)
   {
-    TTask task(
-      std::coroutine_handle<typename TTask::promise_type>::from_promise(
-        *static_cast<typename TTask::promise_type *>(this)));
+    TaskT task(
+      std::coroutine_handle<typename TaskT::promise_type>::from_promise(
+        *static_cast<typename TaskT::promise_type *>(this)));
     return task;
-  }
-
-  // See traits initial_suspend_type.
-  typename Traits::initial_suspend_type
-  initial_suspend() const noexcept {
-    log::trace("Promise::initial_suspend.");
-    return {};
-  }
-
-  // If inner await is supported and there is a pending continuation,
-  // it will be resumed here. The coroutine will be destroyed at the end
-  // of await_suspend.
-  detail::Suspend<Traits::is_async::value, typename TTask::promise_type>
-  final_suspend() const noexcept {
-    log::trace("Promise::final_suspend");
-    return {};
   }
 };
 
