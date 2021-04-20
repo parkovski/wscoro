@@ -29,8 +29,7 @@ namespace std {
 
 namespace wscoro {
 
-template<typename F>
-// template<typename F> requires requires (F f) { { f() } noexcept; }
+template<typename F> requires std::is_nothrow_invocable_v<F>
 struct ScopeExit {
   F f;
   constexpr ScopeExit(F f) noexcept : f(std::move(f)) {}
@@ -57,7 +56,7 @@ inline constexpr static auto scope_exit() noexcept {
 } // namespace wscoro
 
 #define WSCORO_SCOPE_EXIT \
-  auto _scope_exit_##__LINE__ = ::wscoro::scope_exit() && [&]
+  auto _scope_exit_##__LINE__ = ::wscoro::scope_exit() && [&]() noexcept
 
 namespace wscoro::log {
 

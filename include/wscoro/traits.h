@@ -20,17 +20,6 @@ concept ExceptionBehavior =
   std::is_same_v<T, handle_exceptions> ||
   std::is_same_v<T, rethrow_exceptions>;
 
-template<typename T>
-concept AwaitSuspendReturn =
-  std::is_same_v<T, void> ||
-  std::is_same_v<T, bool> ||
-  std::is_convertible_v<T, std::coroutine_handle<>>;
-
-template<typename T, typename Awaitable>
-concept AwaitSuspend =
-  requires (Awaitable a, T t) { { a.*t({}) } -> AwaitSuspendReturn; } ||
-  requires (Awaitable a, T t) { { a.*t() } -> AwaitSuspendReturn; };
-
 // Any type that specifies these options is usable as traits for a Task.
 // Note: gcc missing convertible_to.
 template<typename T>
@@ -40,8 +29,8 @@ concept CoroutineTraits = requires (typename T::initial_suspend_type is) {
   { (bool)(typename T::is_async{}) } -> std::same_as<bool>;
   { typename T::exception_behavior{} } -> ExceptionBehavior;
   { is.await_ready() } -> std::same_as<bool>;
-  { is.await_resume() };
-  // { await_suspend({}) or await_suspend() } -> AwaitSuspendReturn;
+  is.await_resume();
+  // { is.await_suspend() || is.await_suspend({}) } -> acceptable?
   { (bool)(typename T::move_result{}) } -> std::same_as<bool>;
 };
 
