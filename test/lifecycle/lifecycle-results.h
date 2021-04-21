@@ -37,7 +37,7 @@ LCRESULT(Generator) =
 LCRESULT(AsyncGenerator) =
 #include "lc-asyncgenerator.txt"
 
-LCRESULTV(FireAndForget) = "";
-// #include "lc-fireandforget.txt"
+LCRESULTV(FireAndForget) =
+#include "lc-fireandforget.txt"
 
 };

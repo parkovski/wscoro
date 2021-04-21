@@ -5,63 +5,45 @@
 
 #include <typeinfo>
 
-namespace wscoro {
+namespace wscoro::detail {
 
-template<typename T, traits::BasicTaskTraits Traits>
-requires
-  // A generator cannot yield void.
-  (!std::is_void_v<T> || !Traits::is_generator::value) &&
-  // A type with async=false and awaiter=true must return void since it
-  // can't be reliably awaited.
-  (Traits::is_async::value || !Traits::is_awaiter::value || std::is_void_v<T>)
-class BasicTask {
+/// @param P Promise type.
+template<class P>
+class CoroutineBase {
 public:
-  // 
-  struct promise_type : Promise<BasicTask, T, Traits> {};
-
-  // The type produced by awaiting this task.
-  using value_type = T;
-
-  // If this is true (std::true_type), the task produces multiple values via
-  // co_yield.
-  using is_generator = typename Traits::is_generator;
-
-  // This means the promise has a continuation. Without one, awaiting the
-  // task will block the coroutine until it is done.
-  using is_async = typename Traits::is_async;
-
-  friend struct std::hash<BasicTask>;
+  friend struct std::hash<CoroutineBase>;
 
 protected:
-  std::coroutine_handle<promise_type> _coroutine;
+  std::coroutine_handle<P> _coroutine;
 
 public:
-  constexpr BasicTask(std::coroutine_handle<promise_type> coroutine) noexcept
+  constexpr CoroutineBase(std::coroutine_handle<P> coroutine)
+    noexcept
     : _coroutine{coroutine}
   {}
 
-  constexpr BasicTask(BasicTask &&o) noexcept
+  constexpr CoroutineBase(CoroutineBase &&o) noexcept
     : _coroutine{o._coroutine}
   {
     o._coroutine = nullptr;
   }
 
-  constexpr BasicTask &operator=(BasicTask &&o) noexcept {
+  constexpr CoroutineBase &operator=(CoroutineBase &&o) noexcept {
     _coroutine = o._coroutine;
     o._coroutine = nullptr;
     return *this;
   }
 
-  BasicTask(const BasicTask &) = delete;
-  BasicTask &operator=(const BasicTask &) = delete;
+  CoroutineBase(const CoroutineBase &) = delete;
+  CoroutineBase &operator=(const CoroutineBase &) = delete;
 
-  ~BasicTask() {
+  ~CoroutineBase() {
     if (_coroutine) {
       _coroutine.destroy();
     }
   }
 
-  friend void swap(BasicTask &a, BasicTask &b) noexcept {
+  friend void swap(CoroutineBase &a, CoroutineBase &b) noexcept {
     using std::swap;
     swap(a._coroutine, b._coroutine);
   }
@@ -85,13 +67,112 @@ public:
     _coroutine = nullptr;
   }
 
+protected:
+  P &promise() noexcept { return _coroutine.promise(); }
+  const P &promise() const noexcept { return _coroutine.promise(); }
+
+  std::coroutine_handle<P> detach() noexcept {
+    auto coroutine = _coroutine;
+    _coroutine = nullptr;
+    return coroutine;
+  }
+};
+
+} // namespace wscoro::detail
+
+namespace std {
+  template<class P>
+  struct hash<::wscoro::detail::CoroutineBase<P>> {
+    auto operator()(const ::wscoro::detail::CoroutineBase<P> &co)
+      const noexcept
+    {
+      return hash<remove_cvref_t<decltype(co._coroutine)>>{}(co._coroutine);
+    }
+  };
+}
+
+namespace wscoro {
+
+template<typename T, traits::BasicTaskTraits Traits>
+class BasicCoroutine :
+  public detail::CoroutineBase<Promise<BasicCoroutine<T, Traits>>>
+{
+public:
+  using promise_type = Promise<BasicCoroutine>;
+
+private:
+  using base =
+    detail::CoroutineBase<promise_type>;
+
+public:
+  BasicCoroutine(std::coroutine_handle<promise_type> coroutine) noexcept
+    : base{coroutine}
+  {}
+
+  BasicCoroutine(BasicCoroutine &&) = default;
+  BasicCoroutine &operator=(BasicCoroutine &&) = default;
+
+  BasicCoroutine(const BasicCoroutine &) = delete;
+  BasicCoroutine &operator=(const BasicCoroutine &) = delete;
+
+  ~BasicCoroutine() {
+    // Coroutines without a final suspend will destroy themselves - by setting
+    // this to null, the base class destructor will not try to destroy it.
+    if constexpr (!Traits::final_suspend::value) {
+      this->_coroutine = nullptr;
+    }
+  }
+
+  template<bool FS = Traits::final_suspend::value,
+           typename = std::enable_if_t<!FS>>
+  auto detach() {
+    return this->base::detach();
+  }
+};
+
+template<typename T, traits::BasicTaskTraits Traits>
+requires
+  // A generator cannot yield void.
+  (!std::is_void_v<T> || !Traits::is_generator::value) &&
+  // A type with async=false and awaiter=true can't be reliably awaited.
+  (Traits::is_async::value || !Traits::is_awaiter::value)
+class BasicTask : public detail::CoroutineBase<Promise<BasicTask<T, Traits>>> {
+public:
+  // 
+  using promise_type = Promise<BasicTask>;
+
+  // The type produced by awaiting this task.
+  using value_type = T;
+
+  // If this is true (std::true_type), the task produces multiple values via
+  // co_yield.
+  using is_generator = typename Traits::is_generator;
+
+  // This means the promise has a continuation. Without one, awaiting the
+  // task will block the coroutine until it is done.
+  using is_async = typename Traits::is_async;
+
+private:
+  using base = detail::CoroutineBase<promise_type>;
+
+public:
+  constexpr BasicTask(std::coroutine_handle<promise_type> coroutine) noexcept
+    : base{coroutine}
+  {}
+
+  BasicTask(BasicTask &&o) = default;
+  BasicTask &operator=(BasicTask &&o) = default;
+
+  BasicTask(const BasicTask &) = delete;
+  BasicTask &operator=(const BasicTask &) = delete;
+
   // If the coroutine is already done, we can skip the suspend stage.
   bool await_ready() const {
-    if (done()) {
+    if (this->done()) {
       return true;
     }
     if constexpr (Traits::is_generator::value) {
-      return _coroutine.promise().has_value();
+      return this->_coroutine.promise().has_value();
     } else {
       return false;
     }
@@ -103,11 +184,11 @@ public:
     noexcept(Traits::is_async::value)
   {
     if constexpr (!Traits::is_async::value) {
-      resume();
+      this->resume();
       return continuation;
     } else {
-      assert(!_coroutine.promise()._continuation);
-      _coroutine.promise()._continuation = continuation;
+      assert(!this->_coroutine.promise()._continuation);
+      this->_coroutine.promise()._continuation = continuation;
       // TODO: The following line should work but LLVM's await_ready is not
       // constexpr.
       // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
@@ -120,7 +201,7 @@ public:
       } else {
         // If there is an initial suspend, await is the mechanism to start the
         // coroutine.
-        return _coroutine;
+        return this->_coroutine;
       }
     }
   }
@@ -134,53 +215,65 @@ public:
     if constexpr (std::is_same_v<typename Traits::exception_behavior,
                                  traits::handle_exceptions>)
     {
-      if (auto ex = _coroutine.promise()._exception) {
-        _coroutine.promise()._exception = nullptr;
+      if (auto ex = this->_coroutine.promise()._exception) {
+        this->_coroutine.promise()._exception = nullptr;
         std::rethrow_exception(ex);
       }
     }
 
     if constexpr (Traits::is_generator::value) {
       // Generators return optional<T>, nullopt at the end.
-      if (_coroutine.done()) {
+      if (this->done()) {
         return std::optional<T>{};
       } else if constexpr (Traits::move_result::value) {
         return std::optional<T>{std::in_place,
-                                std::move(_coroutine.promise()).data()};
+                                std::move(this->_coroutine.promise()).data()};
       } else {
-        return std::optional<T>{std::in_place, _coroutine.promise().data()};
+        return std::optional<T>{std::in_place,
+                                this->_coroutine.promise().data()};
       }
     } else {
       if constexpr (std::is_void_v<T>) {
         return;
       } else if constexpr (Traits::move_result::value) {
-        return T{std::move(_coroutine.promise()).data()};
+        return T{std::move(this->_coroutine.promise()).data()};
       } else {
-        return T{_coroutine.promise().data()};
+        return T{this->_coroutine.promise().data()};
       }
     }
   }
 };
 
+// A synchronous task that starts immediately. Basically a coroutine wrapper
+// for a simple function call.
 template<typename T = void>
 using Immediate = BasicTask<T, traits::ImmediateTraits>;
 
+// A synchronous task that suspends initially, and then calculates a single
+// value on demand. This is the coroutine equivalent of a lambda.
 template<typename T = void>
 using Lazy = BasicTask<T, traits::LazyTraits>;
 
+// A general purpose task type. Starts suspended and may await other
+// coroutines.
 template<typename T = void>
 using Task = BasicTask<T, traits::TaskTraits>;
 
+// A task that starts immediately. Similar to Task but without the initial
+// suspend.
 template<typename T = void>
 using AutoTask = BasicTask<T, traits::AutoTaskTraits>;
 
+// A task that produces a series of values on demand, synchronously.
 template<typename T>
 using Generator = BasicTask<T, traits::GeneratorTraits>;
 
+// A task that produces a series of values on demand, asynchronously.
 template<typename T>
 using AsyncGenerator = BasicTask<T, traits::AsyncGeneratorTraits>;
 
-using FireAndForget = BasicTask<void, traits::FireAndForgetTraits>;
+// A task that cannot be reliably awaited, but can await other tasks.
+using FireAndForget = BasicCoroutine<void, traits::FireAndForgetTraits>;
 
 // -----
 
@@ -208,12 +301,3 @@ template<typename T>
 using CopyAsyncGenerator = BasicCopyTask<T, traits::AsyncGeneratorTraits>;
 
 } // namespace wscoro
-
-namespace std {
-  template<typename T, ::wscoro::traits::BasicTaskTraits Traits>
-  struct hash<::wscoro::BasicTask<T, Traits>> {
-    auto operator()(const ::wscoro::BasicTask<T, Traits> &task) const noexcept {
-      return hash<remove_cvref_t<decltype(task._coroutine)>>{}(task._coroutine);
-    }
-  };
-}

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <memory>
 #include <atomic>
+#include <thread>
 
 using namespace wscoro;
 
@@ -95,7 +96,9 @@ public:
     return static_cast<int>(s_state.use_count());
   }
 
-  TraceLogger() noexcept {
+  explicit TraceLogger(std::string subname) noexcept
+    : subname{std::move(subname)}
+  {
     int my_id = -1;
     if ((state = s_state.lock())) {
       my_id = s_counter.fetch_add(1, std::memory_order_acq_rel);
@@ -112,22 +115,21 @@ public:
     name = std::to_string(my_id);
   }
 
-  explicit TraceLogger(std::string subname) noexcept : TraceLogger() {
-    this->subname = std::move(subname);
-  }
+  TraceLogger() noexcept : TraceLogger(std::string{}) {}
 
   TraceLogger(TraceLogger &&o) = default;
 
-  TraceLogger(const TraceLogger &o)
-    : state{}, name{o.name}, subname{o.subname}
+  TraceLogger(const TraceLogger &o) noexcept
+    : state{o.state}, name{o.name}, subname{o.subname}
   {
     s_counter.fetch_add(1, std::memory_order_acq_rel);
-    state = o.state;
   }
 
   TraceLogger &operator=(TraceLogger &&o) noexcept {
-    s_counter.fetch_sub(1, std::memory_order_acq_rel);
     state = std::move(o.state);
+    name = std::move(o.name);
+    subname = std::move(o.subname);
+    s_counter.fetch_sub(1, std::memory_order_acq_rel);
     return *this;
   }
 
@@ -157,6 +159,7 @@ public:
 
   template<typename ...Args>
   void operator()(const char *format, Args &&...args) const noexcept {
+    assert(state);
     std::lock_guard lock(state->mutex);
     state->ss << name << " ";
     if (subname.length()) {
@@ -245,12 +248,18 @@ struct Trace<T> : public T {
   using initial_suspend_type = TraceAwait<std::suspend_never>;
 };
 
-template<typename T, traits::BasicTaskTraits Traits>
-struct Trace<BasicTask<T, Traits>> : public BasicTask<T, Trace<Traits>> {
+template<
+  template<typename, traits::BasicTaskTraits> typename TaskT,
+  typename T, traits::BasicTaskTraits Traits
+>
+struct Trace<TaskT<T, Traits>> : public TaskT<T, Trace<Traits>> {
   TraceLogger logger;
 
-  using base = BasicTask<T, Trace<Traits>>;
+  using base = TaskT<T, Trace<Traits>>;
   using base_promise_type = typename base::promise_type;
+
+  template<typename B = base>
+  using value_type = typename B::value_type;
 
   struct promise_type;
 
@@ -261,13 +270,9 @@ private:
       ch.promise());
   }
 
-  template<typename U, typename Tr>
-  constexpr static inline bool returns_void =
-    std::disjunction<typename Tr::is_generator, std::is_void<U>>::value;
-
 public:
   explicit Trace(std::coroutine_handle<promise_type> coroutine) noexcept
-    : BasicTask<T, Trace<Traits>>{to_base(coroutine)}, logger{"task"}
+    : base{to_base(coroutine)}, logger{"task"}
   {
     logger("init promise={}", coroutine.promise().logger.name);
   }
@@ -282,6 +287,7 @@ public:
     if (logger) logger("destroy");
   }
 
+  template<typename B = base, typename = decltype(&B::await_ready)>
   bool await_ready() const
     noexcept(
       std::is_nothrow_invocable_v<decltype(&base::await_ready), base &>
@@ -291,6 +297,7 @@ public:
     return this->base::await_ready();
   }
 
+  template<typename B = base, typename = decltype(&B::await_suspend)>
   decltype(auto)
   await_suspend(std::coroutine_handle<> continuation)
     noexcept(AwaitSuspendNoexcept<base>)
@@ -305,11 +312,11 @@ public:
     }
   }
 
+  template<typename B = base, typename = decltype(&B::await_resume)>
   decltype(auto)
-  await_resume()
-    noexcept(
-      std::is_nothrow_invocable_v<decltype(&base::await_resume), base &>
-    )
+  await_resume() noexcept(
+    std::is_nothrow_invocable_v<decltype(&base::await_resume), base &>
+  )
   {
     logger("await_resume");
     return this->base::await_resume();
@@ -463,19 +470,53 @@ Trace<TaskG> lifecycle_ay(int n) {
   co_return;
 }
 
-Trace<FireAndForget> lifecycle_f(int n) {
-  co_await ([]() -> Lazy<> { co_return; })();
+Trace<FireAndForget> lifecycle_f(std::string &result) {
+  result += "A";
+  co_await lifecycle_a<Task<int>>(0);
+  result += " B";
+  using namespace std::chrono_literals;
+  std::this_thread::sleep_for(5ms);
+  result += " C";
   co_return;
 }
 
+std::string test_lifecycle_f() {
+  union ManualScope {
+    struct {
+      TraceLogger logger;
+      Trace<FireAndForget> task;
+    };
+    ManualScope() noexcept {}
+    ~ManualScope() {}
+  };
+
+  std::string result;
+  ManualScope scope;
+  new (&scope.logger) TraceLogger("executor");
+  scope.logger("init");
+  {
+    new (&scope.task) Trace<FireAndForget>{lifecycle_f(result)};
+    auto coro = scope.task.detach();
+    scope.task.~Trace<FireAndForget>();
+    coro.resume();
+  }
+  scope.logger("result={}", result);
+  scope.logger("destroy");
+  std::string s = scope.logger.get();
+  scope.logger.~TraceLogger();
+  REQUIRE(TraceLogger::get_state_counter() == 0);
+  return s;
+}
+
 TEST_CASE("Lifecycle", "[lifecycle]") {
+
   CHECK(test_lifecycle_a<1, 0>(&lifecycle_s<Immediate<int>>) ==
           lcresult<Immediate<>>);
 
   CHECK(test_lifecycle_a<2, 0>(&lifecycle_s<Lazy<int>>) ==
           lcresult<Lazy<>>);
 
-  CHECK(test_lifecycle_a<3>(&lifecycle_a<Task<int>>) ==
+  CHECK(test_lifecycle_a<3, 3>(&lifecycle_a<Task<int>>) ==
         lcresult<Task<>>);
 
   CHECK(test_lifecycle_a<3, 2>(&lifecycle_a<AutoTask<int>>) ==
@@ -487,8 +528,7 @@ TEST_CASE("Lifecycle", "[lifecycle]") {
   CHECK(test_lifecycle_a<3, 0>(&lifecycle_ay<AsyncGenerator<int>>) ==
         lcresult<AsyncGenerator<int>>);
 
-  // REQUIRE(test_lifecycle_a(&lifecycle_f<FireAndForget<>>) ==
-  //         lcresult<FireAndForget<>>);
+  CHECK(test_lifecycle_f() == lcresult<FireAndForget>);
 }
 
 //

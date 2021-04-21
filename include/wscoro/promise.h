@@ -11,42 +11,6 @@ namespace wscoro {
 
 namespace detail {
 
-// Provides an await_ready that always suspends and an await_resume that does
-// nothing.
-struct SuspendBase {
-  constexpr bool await_ready() const noexcept { return false; }
-  constexpr void await_resume() const noexcept {}
-};
-
-// Sync suspender.
-// Provides an empty await_suspend, equivalent to std::suspend_always, but
-// templated to the promise type for consistency/type safety.
-template<bool Async, typename P>
-struct Suspend : SuspendBase {
-  // Nothing to do here but return to the awaiter.
-  constexpr void await_suspend(std::coroutine_handle<P>) const noexcept {}
-};
-
-// Async suspender.
-// Provides an await_suspend that returns the continuation if one was present,
-// otherwise it simply returns to the awaiter.
-template<typename P>
-struct Suspend<true, P> : SuspendBase {
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<P> coroutine) const noexcept {
-    auto &promise = coroutine.promise();
-    auto continuation = promise._continuation;
-
-    if (continuation) {
-      promise._continuation = nullptr;
-    } else {
-      continuation = std::noop_coroutine();
-    }
-
-    return continuation;
-  }
-};
-
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
 template<typename T, size_t Align = alignof(std::max_align_t)>
@@ -155,25 +119,61 @@ struct PromiseData<void, Align> {
   void data() const noexcept {}
 };
 
-template<class T, class P, class I>
-struct SyncPromiseBase : detail::PromiseData<T> {
-  constexpr static bool async = false;
+// Provides an await_ready that always suspends and an await_resume that does
+// nothing.
+struct SuspendBase {
+  constexpr bool await_ready() const noexcept { return false; }
+  constexpr void await_resume() const noexcept {}
+};
 
+// Sync suspender.
+// Provides an empty await_suspend, equivalent to std::suspend_always, but
+// templated to the promise type for consistency/type safety.
+template<bool Async, typename P>
+struct Suspend : SuspendBase {
+  // Nothing to do here but return to the awaiter.
+  constexpr void await_suspend(std::coroutine_handle<P>) const noexcept {}
+};
+
+template<bool Enable, bool Async, typename P>
+using SuspendIf =
+  std::conditional_t<Enable, Suspend<Async, P>, std::suspend_never>;
+
+// Async suspender.
+// Provides an await_suspend that returns the continuation if one was present,
+// otherwise it simply returns to the awaiter.
+template<typename P>
+struct Suspend<true, P> : SuspendBase {
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<P> coroutine) const noexcept {
+    auto &promise = coroutine.promise();
+    auto continuation = promise._continuation;
+
+    if (continuation) {
+      promise._continuation = nullptr;
+    } else {
+      continuation = std::noop_coroutine();
+    }
+
+    return continuation;
+  }
+};
+
+template<class T, class P, class I, bool FS>
+struct SyncPromiseBase : detail::PromiseData<T> {
   using suspend_type = Suspend<false, P>;
 
   I initial_suspend() const noexcept {
     return {};
   }
 
-  suspend_type final_suspend() const noexcept {
+  SuspendIf<FS, false, P> final_suspend() const noexcept {
     return {};
   }
 };
 
-template<class T, class P, class I>
+template<class T, class P, class I, bool FS>
 struct AsyncPromiseBase : detail::PromiseData<T> {
-  constexpr static bool async = true;
-
   using suspend_type = Suspend<true, P>;
 
   std::coroutine_handle<> _continuation{};
@@ -188,7 +188,7 @@ struct AsyncPromiseBase : detail::PromiseData<T> {
     return {};
   }
 
-  suspend_type final_suspend() const noexcept {
+  SuspendIf<FS, true, P> final_suspend() const noexcept {
     return {};
   }
 };
@@ -196,8 +196,9 @@ struct AsyncPromiseBase : detail::PromiseData<T> {
 template<class Base>
 struct ValuePromiseBase;
 
-template<template<class, class, class> class Base, class T, class P, class I>
-struct ValuePromiseBase<Base<T, P, I>> : Base<T, P, I> {
+template<template<class, class, class, bool> class Base,
+         class T, class P, class I, bool FS>
+struct ValuePromiseBase<Base<T, P, I, FS>> : Base<T, P, I, FS> {
   template<typename U = T>
   void return_value(
     std::enable_if_t<std::is_move_constructible_v<U>, T> &&value
@@ -215,18 +216,19 @@ struct ValuePromiseBase<Base<T, P, I>> : Base<T, P, I> {
   }
 };
 
-template<template<class, class, class> class Base, class P, class I>
-struct ValuePromiseBase<Base<void, P, I>> : Base<void, P, I> {
+template<template<class, class, class, bool> class Base,
+         class P, class I, bool FS>
+struct ValuePromiseBase<Base<void, P, I, FS>> : Base<void, P, I, FS> {
   constexpr void return_void() const noexcept {}
 };
 
 template<class Base>
 struct GeneratorPromiseBase;
 
-template<template<class, class, class> class Base, class T, class P, class I>
-struct GeneratorPromiseBase<Base<T, P, I>> : Base<T, P, I> {
-  using base = Base<T, P, I>;
-  using suspend_type = typename base::suspend_type;
+template<template<class, class, class, bool> class Base,
+         class T, class P, class I, bool FS>
+struct GeneratorPromiseBase<Base<T, P, I, FS>> : Base<T, P, I, FS> {
+  using suspend_type = typename Base<T, P, I, FS>::suspend_type;
 
   constexpr void return_void() const noexcept {}
 
@@ -255,31 +257,37 @@ struct GeneratorPromiseBase<Base<T, P, I>> : Base<T, P, I> {
   }
 };
 
-template<class T, class P, class I, bool Generator, bool Async>
+template<class T, class P, class I, bool FS, bool Generator, bool Async>
 struct PromiseBaseT;
 
-template<class T, class P, class I>
-struct PromiseBaseT<T, P, I, false, false> {
-  using type = ValuePromiseBase<SyncPromiseBase<T, P, I>>;
+template<class T, class P, class I, bool FS>
+struct PromiseBaseT<T, P, I, FS, false, false> {
+  using type = ValuePromiseBase<SyncPromiseBase<T, P, I, FS>>;
 };
 
-template<class T, class P, class I>
-struct PromiseBaseT<T, P, I, false, true> {
-  using type = ValuePromiseBase<AsyncPromiseBase<T, P, I>>;
+template<class T, class P, class I, bool FS>
+struct PromiseBaseT<T, P, I, FS, false, true> {
+  using type = ValuePromiseBase<AsyncPromiseBase<T, P, I, FS>>;
 };
 
-template<class T, class P, class I>
-struct PromiseBaseT<T, P, I, true, false> {
-  using type = GeneratorPromiseBase<SyncPromiseBase<T, P, I>>;
+template<class T, class P, class I, bool FS>
+struct PromiseBaseT<T, P, I, FS, true, false> {
+  using type = GeneratorPromiseBase<SyncPromiseBase<T, P, I, FS>>;
 };
 
-template<class T, class P, class I>
-struct PromiseBaseT<T, P, I, true, true> {
-  using type = GeneratorPromiseBase<AsyncPromiseBase<T, P, I>>;
+template<class T, class P, class I, bool FS>
+struct PromiseBaseT<T, P, I, FS, true, true> {
+  using type = GeneratorPromiseBase<AsyncPromiseBase<T, P, I, FS>>;
 };
 
-template<class T, class P, class I, bool Generator, bool Async>
-using PromiseBase = typename PromiseBaseT<T, P, I, Generator, Async>::type;
+/// @param T Promise data type.
+/// @param P The task's promise_type.
+/// @param I The initial suspend type.
+/// @param FS Determines if the task will have a final suspend.
+/// @param Generator Is the coroutine a generator?
+/// @param Async Does the coroutine have a continuation?
+template<class T, class P, class I, bool FS, bool Generator, bool Async>
+using PromiseBase = typename PromiseBaseT<T, P, I, FS, Generator, Async>::type;
 
 // Behavior when an unhandled exception is thrown inside the coroutine.
 template<traits::ExceptionBehavior EB>
@@ -324,22 +332,37 @@ struct PromiseAwaitTransform<false> {
 
 } // namespace detail
 
-template<typename TaskT, typename T, traits::BasicTaskTraits Traits>
-struct Promise :
-  detail::PromiseBase<T, typename TaskT::promise_type,
-                      typename Traits::initial_suspend_type,
-                      Traits::is_generator::value, Traits::is_async::value>,
+template<class TaskT>
+struct Promise;
+
+template<
+  template<class, traits::BasicTaskTraits> class TaskT,
+  class T, traits::BasicTaskTraits Traits
+>
+struct Promise<TaskT<T, Traits>> :
+  detail::PromiseBase<
+    T,
+    typename TaskT<T, Traits>::promise_type,
+    typename Traits::initial_suspend_type,
+    Traits::final_suspend::value,
+    Traits::is_generator::value,
+    Traits::is_async::value
+  >,
   detail::PromiseUnhandledException<typename Traits::exception_behavior>,
   detail::PromiseAwaitTransform<Traits::is_awaiter::value>
 {
-  TaskT get_return_object()
+  TaskT<T, Traits> get_return_object()
     noexcept(std::is_nothrow_constructible_v<
-      TaskT, std::coroutine_handle<typename TaskT::promise_type>>)
+      TaskT<T, Traits>,
+      std::coroutine_handle<typename TaskT<T, Traits>::promise_type>
+    >)
   {
-    TaskT task(
-      std::coroutine_handle<typename TaskT::promise_type>::from_promise(
-        *static_cast<typename TaskT::promise_type *>(this)));
-    return task;
+    return {
+      std::coroutine_handle<typename TaskT<T, Traits>::promise_type>
+        ::from_promise(
+          *static_cast<typename TaskT<T, Traits>::promise_type *>(this)
+        )
+    };
   }
 };
 
