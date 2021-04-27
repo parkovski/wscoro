@@ -20,27 +20,97 @@ concept ExceptionBehavior =
   std::is_same_v<T, handle_exceptions> ||
   std::is_same_v<T, rethrow_exceptions>;
 
-/*
 template<typename T>
 concept AwaitSuspendReturn =
   std::is_same_v<T, void> ||
   std::is_same_v<T, bool> ||
-  std::is_convertible_v<T, std::coroutine_handle<>>;
-*/
+  std::is_convertible_v<T, std_::coroutine_handle<>>;
+
+template<typename A, typename P = void>
+concept DirectAwaitable = requires (A a, std_::coroutine_handle<P> h) {
+  bool(a.await_ready());
+  a.await_resume();
+  requires requires { { a.await_suspend(h) } -> AwaitSuspendReturn; } ||
+           requires { { a.await_suspend() }  -> AwaitSuspendReturn; };
+};
+
+template<class A, typename P = void>
+concept Awaiter =
+  requires (A a) { { a.operator co_await() } -> DirectAwaitable<P>; } ||
+  requires (A a) { { operator co_await(a) }  -> DirectAwaitable<P>; } ||
+  DirectAwaitable<A, P>;
+
+template<class P, class C = decltype(std::declval<P>().get_return_object())>
+concept PartialPromise = requires(P p) {
+  { p.get_return_object() } -> std_::same_as<C>;
+  { p.initial_suspend() } -> Awaiter<P>;
+  { p.final_suspend() }   -> Awaiter<P>;
+};
+
+template<class P>
+concept PromiseReturnVoid = requires (P p) { p.return_void(); };
+
+template<class P, class T>
+concept PromiseReturnValue = requires (P p, T t) {
+  p.return_value(std::move(t));
+};
+
+template<class P, class T>
+concept PromiseReturn =
+  (std::is_void_v<T> && requires(P p) { p.return_void(); }) ||
+  requires (P p, T t) { p.return_value(std::move(t)); };
+
+template<class P>
+concept VoidPromise = PartialPromise<P> && PromiseReturnVoid<P>;
+
+template<class P, class T>
+concept ValuePromise = PartialPromise<P> && PromiseReturnValue<P, T>;
+
+template<class P, class T>
+concept GeneratorPromise = PartialPromise<P> && PromiseReturnVoid<P> &&
+  requires (P p, T t) {
+    { p.yield_value(std::move(t)) } -> Awaiter;
+  };
+
+template<class P, class T = std::nullptr_t, class C = std::nullptr_t>
+concept Promise = (std::is_void_v<T> && VoidPromise<P>) ||
+  ValuePromise<P, T> ||
+  GeneratorPromise<P, T>;
+
+template<class A, class P>
+concept Awaitable =
+  requires (A a, P p) { { p.await_transform(a) } -> Awaiter; } ||
+  Awaiter<A>;
+
+template<class C, class T>
+concept Coroutine =
+  Promise<typename C::promise_type, T, C> &&
+  requires(C c) {
+    c.resume();
+    c.destroy();
+    { c.done() } -> std_::same_as<bool>;
+    c.operator bool();
+  };
+
+template<class C>
+concept Detachable = requires (C c) { c.detach(); };
+
+template<class TaskT, class T>
+concept Tasklike = Coroutine<TaskT, T> && Awaiter<TaskT>;
 
 // Any type that specifies these options is usable as traits for a Task.
-// Note: gcc missing convertible_to.
+// bool_constant::value is actually a const bool, so trying to use same_as
+// is annoying.
 template<typename T>
-concept BasicTaskTraits = requires (typename T::initial_suspend_type is) {
-  { (bool)typename T::is_generator{} };
-  { (bool)typename T::is_awaiter{} };
-  { (bool)typename T::is_async{} };
-  { typename T::exception_behavior{} } -> ExceptionBehavior;
-  { is.await_ready() } -> std::same_as<bool>;
-  // { is.await_suspend() || is.await_suspend({}) } -> AwaitSuspendReturn
-  is.await_resume();
-  { (bool)typename T::move_result{} };
-};
+concept BasicTaskTraits =
+  Awaiter<typename T::initial_suspend_type> &&
+  ExceptionBehavior<typename T::exception_behavior> &&
+  requires {
+    (bool)T::is_generator::value;
+    (bool)T::is_awaiter::value;
+    (bool)T::is_async::value;
+    (bool)T::move_result::value;
+  };
 
 template<bool Async>
 struct DefaultTaskTraits {
@@ -74,12 +144,12 @@ struct DefaultTaskTraits {
     std::conditional_t<Async, handle_exceptions, rethrow_exceptions>;
 
   // Type returned from promise's initial_suspend - should be
-  // std::suspend_never or std::suspend_always (default), but any awaiter is
+  // std_::suspend_never or std_::suspend_always (default), but any awaiter is
   // valid if there's a reason to customize this further. Issuing a suspend
   // here will stop the coroutine before any of its work is done. Otherwise
   // the coroutine will immediately run to the next suspend point on
   // creation.
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
 
   // Disabling this is only useful when you don't care about the result. It
   // causes the coroutine to self-destruct when it finishes.
@@ -96,7 +166,7 @@ struct ImmediateTraits {
   using is_async = std::false_type;
   using is_awaiter = std::false_type;
   using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_never;
+  using initial_suspend_type = std_::suspend_never;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -106,7 +176,7 @@ struct LazyTraits {
   using is_async = std::false_type;
   using is_awaiter = std::false_type;
   using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -116,7 +186,7 @@ struct TaskTraits {
   using is_async = std::true_type;
   using is_awaiter = std::true_type;
   using exception_behavior = traits::handle_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -126,7 +196,7 @@ struct AutoTaskTraits {
   using is_async = std::true_type;
   using is_awaiter = std::true_type;
   using exception_behavior = handle_exceptions;
-  using initial_suspend_type = std::suspend_never;
+  using initial_suspend_type = std_::suspend_never;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -136,7 +206,7 @@ struct GeneratorTraits {
   using is_async = std::false_type;
   using is_awaiter = std::false_type;
   using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -146,7 +216,7 @@ struct AsyncGeneratorTraits {
   using is_async = std::true_type;
   using is_awaiter = std::true_type;
   using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
   using final_suspend = std::true_type;
   using move_result = std::true_type;
 };
@@ -156,7 +226,7 @@ struct FireAndForgetTraits {
   using is_async = std::false_type;
   using is_awaiter = std::true_type;
   using exception_behavior = rethrow_exceptions;
-  using initial_suspend_type = std::suspend_always;
+  using initial_suspend_type = std_::suspend_always;
   using final_suspend = std::false_type;
   using move_result = std::true_type;
 };

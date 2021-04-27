@@ -1,94 +1,78 @@
 #pragma once
 
 #include <type_traits>
+#include <memory>
+#include <cassert>
 
-#if __has_include(<experimental/concepts>) && !__has_include(<concepts>)
-# include <experimental/concepts>
-# define STD_NEEDS_EXPERIMENTAL
-#else
-# include <concepts>
+#if !defined(WSCORO_STD_EXPERIMENTAL)
+# // Both clang (11) and gcc (10) need experimental headers, MSVC needs
+# // non-experimental.
+# if defined(__GNUC__) || defined(__clang__) || !__has_include(<coroutine>)
+#  define WSCORO_STD_EXPERIMENTAL
+# endif
 #endif
 
-#if __has_include(<experimental/coroutine>) && !__has_include(<coroutine>)
+namespace wscoro {
+  namespace detail {
+    template< class T, class U >
+    concept SameHelper = std::is_same_v<T, U>;
+  }
+  namespace std_ {
+    template<class T, class U>
+    concept same_as = detail::SameHelper<T, U> && detail::SameHelper<U, T>;
+  }
+}
+
+#ifdef WSCORO_STD_EXPERIMENTAL
 # include <experimental/coroutine>
-# define STD_NEEDS_EXPERIMENTAL
+namespace wscoro::std_ {
+  template<class P = void>
+  using coroutine_handle = std::experimental::coroutine_handle<P>;
+
+  using std::experimental::suspend_never;
+  using std::experimental::suspend_always;
+
+  using std::experimental::noop_coroutine;
+}
 #else
 # include <coroutine>
-#endif
+namespace wscoro::std_ {
+  template<class P = void>
+  using coroutine_handle = std::coroutine_handle<P>;
 
-#ifdef STD_NEEDS_EXPERIMENTAL
-namespace std {
-  using namespace experimental;
+  using std::suspend_never;
+  using std::suspend_always;
+
+  using std::noop_coroutine;
 }
 #endif
-
-#include <memory>
-
-#include <spdlog/spdlog.h>
-#include <spdlog/logger.h>
 
 namespace wscoro {
 
-template<typename F> requires std::is_nothrow_invocable_v<F>
-struct ScopeExit {
-  F f;
-  constexpr ScopeExit(F f) noexcept : f(std::move(f)) {}
-  ~ScopeExit() { f(); }
-};
+namespace detail {
+  template<typename F> requires std::is_nothrow_invocable_v<F>
+  struct ScopeExit {
+    F f;
+    constexpr ScopeExit(F f) noexcept : f(std::move(f)) {}
+    ~ScopeExit() { f(); }
+  };
+
+  // Use operator&& on a lambda.
+  struct ScopeExitHelper {
+    template<typename F>
+    constexpr ScopeExit<F> operator&&(F f) const noexcept {
+      return ScopeExit<F>(std::move(f));
+    }
+  };
+} // namespace detail
 
 template<typename F>
-inline constexpr static auto scope_exit(F f) noexcept {
-  return ScopeExit<F>(f);
+inline constexpr static detail::ScopeExit<F> scope_exit(F f) noexcept {
+  return {std::move(f)};
 }
 
-// Use operator&& on a lambda.
-struct ScopeExitHelper {
-  template<typename F>
-  constexpr ScopeExit<F> operator&&(F f) const noexcept {
-    return ScopeExit<F>(std::move(f));
-  }
-};
-
-inline constexpr static auto scope_exit() noexcept {
-  return ScopeExitHelper{};
+inline constexpr static detail::ScopeExitHelper scope_exit() noexcept {
+  return {};
 }
 
 } // namespace wscoro
-
-#define WSCORO_SCOPE_EXIT \
-  auto _scope_exit_##__LINE__ = ::wscoro::scope_exit() && [&]() noexcept
-
-namespace wscoro::log {
-
-#ifdef WSCORO_LOGGER
-extern std::shared_ptr<spdlog::logger> WSCORO_LOGGER;
-# define LOGMETHOD(name)                                   \
-  template<typename... Args>                               \
-  static void name(const char *fmt, Args &&...args) {      \
-    WSCORO_LOGGER->name(fmt, std::forward<Args>(args)...); \
-  }
-
-#else
-# define LOGMETHOD(name)     \
-  template<typename... Args> \
-  static void name(const char *, Args &&...) {}
-
-#endif
-
-LOGMETHOD(trace)
-LOGMETHOD(debug)
-LOGMETHOD(info)
-LOGMETHOD(warn)
-LOGMETHOD(error)
-#undef LOGMETHOD
-
-// Logs a critical error and calls std::terminate.
-template<typename... Args>
-static void critical(const char *fmt, Args &&...args) {
-#ifdef WSCORO_LOGGER
-  WSCORO_LOGGER->name(fmt, std::forward<Args>(args)...);
-#endif
-  std::terminate();
-}
-
-} // namespace wscoro::log

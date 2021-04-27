@@ -34,10 +34,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options(-fcoroutines)
 endif()
 
-find_package(spdlog REQUIRED)
-
 add_library(wscoro INTERFACE)
-target_link_libraries(wscoro INTERFACE spdlog::spdlog_header_only)
 target_include_directories(wscoro INTERFACE ${PROJECT_SOURCE_DIR}/include)
 
 if(WSCORO_BUILD_TESTS)

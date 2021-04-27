@@ -1,4 +1,3 @@
-#define WSCORO_LOG g_logger
 #include "wscoro/task.h"
 
 #include <catch2/catch_all.hpp>
@@ -19,7 +18,7 @@ template<template<typename> typename TTask>
 static TTask<int> get_one(int &counter) {
   auto final_inc = scope_exit([&]() noexcept { ++counter; });
   ++counter;
-  co_await std::suspend_always{};
+  co_await std_::suspend_always{};
   ++counter;
   co_return 1;
 }

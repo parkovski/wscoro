@@ -1,4 +1,3 @@
-#define WSCORO_LOG g_logger
 #include "wscoro/task.h"
 
 #include <catch2/catch_all.hpp>

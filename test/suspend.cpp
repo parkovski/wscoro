@@ -1,4 +1,3 @@
-#define WSCORO_LOG g_logger
 #include "wscoro/task.h"
 
 #include <catch2/catch_all.hpp>
@@ -10,7 +9,7 @@ using namespace wscoro;
 template<typename TaskB>
 TaskB suspend_b(std::stringstream &s) {
   s << ", [B0]";
-  co_await std::suspend_always{};
+  co_await std_::suspend_always{};
   s << "B1";
 }
 

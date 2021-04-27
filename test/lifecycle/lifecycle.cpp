@@ -1,6 +1,5 @@
 #include "lifecycle-results.h"
 
-#define WSCORO_LOG g_logger
 #include "wscoro/task.h"
 
 #include <catch2/catch_all.hpp>
@@ -11,6 +10,7 @@
 #include <memory>
 #include <atomic>
 #include <thread>
+#include <mutex>
 
 using namespace wscoro;
 
@@ -21,17 +21,13 @@ using namespace wscoro;
 template<typename T, typename P = void>
 concept AwaitSuspend =
   std::is_invocable_v<decltype(&T::await_suspend), T &,
-                      std::coroutine_handle<P>> ||
-  std::is_invocable_v<decltype(&T::await_suspend), T &,
-                      std::coroutine_handle<>> ||
+                      std_::coroutine_handle<P>> ||
   std::is_invocable_v<decltype(&T::await_suspend), T &>;
 
 template<typename T, typename P = void>
 concept AwaitSuspendNoexcept =
   std::is_nothrow_invocable_v<decltype(&T::await_suspend), T &,
-                              std::coroutine_handle<P>> ||
-  std::is_nothrow_invocable_v<decltype(&T::await_suspend), T &,
-                              std::coroutine_handle<>> ||
+                              std_::coroutine_handle<P>> ||
   std::is_nothrow_invocable_v<decltype(&T::await_suspend), T &>;
 
 // Creates a function object that casts a coroutine_handle<Q> to
@@ -40,17 +36,17 @@ template<typename P>
 struct handle_cast_t {
   // Identity function - target type is same as source type.
   constexpr
-  std::coroutine_handle<P>
-  operator()(std::coroutine_handle<P> handle) const noexcept {
+  std_::coroutine_handle<P>
+  operator()(std_::coroutine_handle<P> handle) const noexcept {
     return handle;
   }
 
   // If P is a base class of some Q, we can create a coroutine_handle<P>
   // from a coroutine_handle<Q>.
   template<typename Q>
-  std::enable_if_t<std::is_base_of_v<P, Q>, std::coroutine_handle<P>>
-  operator()(std::coroutine_handle<Q> handle) const noexcept {
-    return std::coroutine_handle<P>::from_promise(handle.promise());
+  std::enable_if_t<std::is_base_of_v<P, Q>, std_::coroutine_handle<P>>
+  operator()(std_::coroutine_handle<Q> handle) const noexcept {
+    return std_::coroutine_handle<P>::from_promise(handle.promise());
   }
 };
 
@@ -59,8 +55,8 @@ template<>
 struct handle_cast_t<void> {
   // Returns the implicitly casted handle (operator coroutine_handle<>()).
   template<typename Q>
-  std::coroutine_handle<>
-  operator()(std::coroutine_handle<Q> handle) const noexcept {
+  std_::coroutine_handle<>
+  operator()(std_::coroutine_handle<Q> handle) const noexcept {
     return handle;
   }
 };
@@ -158,14 +154,14 @@ public:
   }
 
   template<typename ...Args>
-  void operator()(const char *format, Args &&...args) const noexcept {
+  void operator()(Args &&...args) const noexcept {
     assert(state);
     std::lock_guard lock(state->mutex);
     state->ss << name << " ";
     if (subname.length()) {
       state->ss << subname << " ";
     }
-    state->ss << fmt::format(format, std::forward<Args>(args)...) << "\n";
+    (state->ss << ... << args) << "\n";
   }
 
   // clears the internal buffer, returning what was in it.
@@ -181,10 +177,10 @@ std::weak_ptr<TraceLogger::State> TraceLogger::s_state;
 std::atomic<int> TraceLogger::s_counter;
 std::atomic<int> TraceLogger::s_destroy_counter;
 
-template<typename T>
+template<class T>
 struct Trace;
 
-template<typename T>
+template<class T>
 struct TraceAwait : private T {
   TraceLogger logger;
 
@@ -204,58 +200,76 @@ struct TraceAwait : private T {
     if (logger) logger("destroy");
   }
 
-  bool await_ready() noexcept(noexcept(this->T::await_ready())) {
+  bool await_ready() const
+    noexcept(std::is_nothrow_invocable_v<decltype(&T::await_ready), T &>)
+  {
     logger("await_ready");
     return this->T::await_ready();
   }
 
-  template<typename P>
-  decltype(auto)
-  await_suspend(std::coroutine_handle<P> handle)
-    noexcept(AwaitSuspendNoexcept<T, P> ||
-             AwaitSuspendNoexcept<T, typename P::base>)
-  {
-    static_assert(AwaitSuspend<T, P> ||
-                  AwaitSuspend<T, typename P::base>);
-    logger("await_suspend");
-
-    if constexpr (
-      std::is_invocable_v<decltype(&T::await_suspend), T &,
-                          std::coroutine_handle<P>>) {
-      return this->T::await_suspend(handle);
-    }
-    else if constexpr (
-      std::is_invocable_v<decltype(&T::await_suspend), T &,
-                          std::coroutine_handle<typename P::base>>) {
-      return this->T::await_suspend(handle_cast<typename P::base>(handle));
-    }
-    else {
-      return this->T::await_suspend();
-    }
+  template<
+    class AS = decltype(&T::await_suspend),
+    class = std::enable_if_t<std::is_invocable_v<AS, T &>>
+  >
+  decltype(auto) await_suspend() noexcept(AwaitSuspendNoexcept<T>) {
+    return this->T::await_suspend();
   }
 
-  decltype(auto) await_resume() noexcept(noexcept(this->T::await_resume())) {
+  template<
+    class P,
+    class AS = decltype(&T::await_suspend),
+    class = std::enable_if_t<
+      std::is_invocable_v<AS, T &, std_::coroutine_handle<P>>
+    >
+  >
+  decltype(auto) await_suspend(std_::coroutine_handle<P> handle)
+    noexcept(AwaitSuspendNoexcept<T, P>)
+  {
+    logger("await_suspend");
+    return this->T::await_suspend(handle);
+  }
+
+  template<
+    class P,
+    class PB = typename P::base,
+    class AS = decltype(&T::await_suspend),
+    class = std::enable_if_t<
+      std::is_invocable_v<AS, T &, std_::coroutine_handle<PB>> &&
+      !std::is_invocable_v<AS, T &, std_::coroutine_handle<P>>
+    >
+  >
+  decltype(auto) await_suspend(std_::coroutine_handle<P> handle)
+    noexcept(AwaitSuspendNoexcept<T, PB>)
+  {
+    logger("await_suspend");
+    return this->T::await_suspend(handle_cast<PB>(handle));
+  }
+
+  decltype(auto) await_resume()
+    noexcept(std::is_nothrow_invocable_v<decltype(&T::await_resume), T &>)
+  {
     logger("await_resume");
     return this->T::await_resume();
   }
 };
 
-template<typename T>
+template<class T>
 TraceAwait(std::string, T &&) -> TraceAwait<T>;
 
 template<traits::BasicTaskTraits T>
-struct Trace<T> : public T {
-  using initial_suspend_type = TraceAwait<std::suspend_never>;
+struct TraceTraits : public T {
+  using initial_suspend_type = TraceAwait<std_::suspend_never>;
 };
 
 template<
-  template<typename, traits::BasicTaskTraits> typename TaskT,
-  typename T, traits::BasicTaskTraits Traits
+  template<class, class> class TaskT,
+  class T,
+  class Traits
 >
-struct Trace<TaskT<T, Traits>> : public TaskT<T, Trace<Traits>> {
+struct Trace<TaskT<T, Traits>> : public TaskT<T, TraceTraits<Traits>> {
   TraceLogger logger;
 
-  using base = TaskT<T, Trace<Traits>>;
+  using base = TaskT<T, TraceTraits<Traits>>;
   using base_promise_type = typename base::promise_type;
 
   template<typename B = base>
@@ -264,17 +278,17 @@ struct Trace<TaskT<T, Traits>> : public TaskT<T, Trace<Traits>> {
   struct promise_type;
 
 private:
-  static std::coroutine_handle<base_promise_type>
-  to_base(std::coroutine_handle<promise_type> ch) noexcept {
-    return std::coroutine_handle<base_promise_type>::from_promise(
+  static std_::coroutine_handle<base_promise_type>
+  to_base(std_::coroutine_handle<promise_type> ch) noexcept {
+    return std_::coroutine_handle<base_promise_type>::from_promise(
       ch.promise());
   }
 
 public:
-  explicit Trace(std::coroutine_handle<promise_type> coroutine) noexcept
+  explicit Trace(std_::coroutine_handle<promise_type> coroutine) noexcept
     : base{to_base(coroutine)}, logger{"task"}
   {
-    logger("init promise={}", coroutine.promise().logger.name);
+    logger("init promise=", coroutine.promise().logger.name);
   }
 
   Trace(Trace &&) = default;
@@ -299,13 +313,13 @@ public:
 
   template<typename B = base, typename = decltype(&B::await_suspend)>
   decltype(auto)
-  await_suspend(std::coroutine_handle<> continuation)
+  await_suspend(std_::coroutine_handle<> continuation)
     noexcept(AwaitSuspendNoexcept<base>)
   {
     logger("await_suspend");
     if constexpr (
       std::is_invocable_v<decltype(&base::await_suspend), base &,
-                          std::coroutine_handle<>>) {
+                          std_::coroutine_handle<>>) {
       return this->base::await_suspend(continuation);
     } else {
       return this->base::await_suspend();
@@ -339,9 +353,9 @@ public:
 
     Trace get_return_object()
       noexcept(std::is_nothrow_constructible_v<
-        Trace, std::coroutine_handle<promise_type>>)
+        Trace, std_::coroutine_handle<promise_type>>)
     {
-      Trace task(std::coroutine_handle<promise_type>::from_promise(*this));
+      Trace task(std_::coroutine_handle<promise_type>::from_promise(*this));
       return task;
     }
 
@@ -384,7 +398,7 @@ public:
 // Test implementation {{{
 //
 
-template<int N = 1, int Resume = N, typename TaskT = void>
+template<int N, int Resume, class TaskT>
 std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
   union ManualScope {
     TraceLogger logger;
@@ -407,7 +421,7 @@ std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
 
         for (int resume = 0; resume < Resume; ++resume) {
           CHECK(!task.done());
-          scope.logger("resume count={}", resume);
+          scope.logger("resume count=", resume);
           task.resume();
         }
       }
@@ -430,7 +444,7 @@ std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
       }
     }
   }
-  scope.logger("result={}", result);
+  scope.logger("result=", result);
   scope.logger("destroy");
   std::string s = scope.logger.get();
   scope.logger.~TraceLogger();
@@ -446,7 +460,7 @@ Trace<TaskT> lifecycle_s(int n) {
 template<typename TaskT>
 Trace<TaskT> lifecycle_a(int n) {
   while (n--) {
-    co_await TraceAwait<std::suspend_always>{"suspend_always"};
+    co_await TraceAwait<std_::suspend_always>{"suspend_always"};
   }
   co_return n; // -1
 }
@@ -500,7 +514,7 @@ std::string test_lifecycle_f() {
     scope.task.~Trace<FireAndForget>();
     coro.resume();
   }
-  scope.logger("result={}", result);
+  scope.logger("result=", result);
   scope.logger("destroy");
   std::string s = scope.logger.get();
   scope.logger.~TraceLogger();
