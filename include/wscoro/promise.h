@@ -173,7 +173,7 @@ struct SuspendBase {
 template<bool Async, typename P>
 struct Suspend : SuspendBase {
   // Nothing to do here but return to the awaiter.
-  constexpr void await_suspend(std_::coroutine_handle<P>) const noexcept {}
+  constexpr void await_suspend(std::coroutine_handle<P>) const noexcept {}
 };
 
 // Async suspender.
@@ -181,15 +181,15 @@ struct Suspend : SuspendBase {
 // otherwise it simply returns to the awaiter.
 template<typename P>
 struct Suspend<true, P> : SuspendBase {
-  std_::coroutine_handle<>
-  await_suspend(std_::coroutine_handle<P> coroutine) const noexcept {
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<P> coroutine) const noexcept {
     auto &promise = coroutine.promise();
     auto continuation = promise._continuation;
 
     if (continuation) {
       promise._continuation = nullptr;
     } else {
-      continuation = std_::noop_coroutine();
+      continuation = std::noop_coroutine();
     }
 
     return continuation;
@@ -198,7 +198,7 @@ struct Suspend<true, P> : SuspendBase {
 
 template<bool Enable, bool Async, typename P>
 using SuspendIf =
-  std::conditional_t<Enable, Suspend<Async, P>, std_::suspend_never>;
+  std::conditional_t<Enable, Suspend<Async, P>, std::suspend_never>;
 
 template<class T, class P, bool FS>
 struct SyncPromiseBase : detail::PromiseData<T> {
@@ -209,7 +209,7 @@ template<class T, class P, bool FS>
 struct AsyncPromiseBase : detail::PromiseData<T> {
   using suspend_type = SuspendIf<FS, true, P>;
 
-  std_::coroutine_handle<> _continuation{};
+  std::coroutine_handle<> _continuation{};
 
   ~AsyncPromiseBase() {
     if (_continuation) {
@@ -319,10 +319,10 @@ public:
 
   task_type get_return_object()
     noexcept(std::is_nothrow_constructible_v<
-      task_type, std_::coroutine_handle<real_promise>
+      task_type, std::coroutine_handle<real_promise>
     >)
   {
-    return {std_::coroutine_handle<real_promise>
+    return {std::coroutine_handle<real_promise>
               ::from_promise(*static_cast<real_promise * >(this))};
   }
 

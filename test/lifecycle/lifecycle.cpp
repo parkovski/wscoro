@@ -21,13 +21,13 @@ using namespace wscoro;
 template<typename T, typename P = void>
 concept AwaitSuspend =
   std::is_invocable_v<decltype(&T::await_suspend), T &,
-                      std_::coroutine_handle<P>> ||
+                      std::coroutine_handle<P>> ||
   std::is_invocable_v<decltype(&T::await_suspend), T &>;
 
 template<typename T, typename P = void>
 concept AwaitSuspendNoexcept =
   std::is_nothrow_invocable_v<decltype(&T::await_suspend), T &,
-                              std_::coroutine_handle<P>> ||
+                              std::coroutine_handle<P>> ||
   std::is_nothrow_invocable_v<decltype(&T::await_suspend), T &>;
 
 // Creates a function object that casts a coroutine_handle<Q> to
@@ -36,17 +36,17 @@ template<typename P>
 struct handle_cast_t {
   // Identity function - target type is same as source type.
   constexpr
-  std_::coroutine_handle<P>
-  operator()(std_::coroutine_handle<P> handle) const noexcept {
+  std::coroutine_handle<P>
+  operator()(std::coroutine_handle<P> handle) const noexcept {
     return handle;
   }
 
   // If P is a base class of some Q, we can create a coroutine_handle<P>
   // from a coroutine_handle<Q>.
   template<typename Q>
-  std::enable_if_t<std::is_base_of_v<P, Q>, std_::coroutine_handle<P>>
-  operator()(std_::coroutine_handle<Q> handle) const noexcept {
-    return std_::coroutine_handle<P>::from_promise(handle.promise());
+  std::enable_if_t<std::is_base_of_v<P, Q>, std::coroutine_handle<P>>
+  operator()(std::coroutine_handle<Q> handle) const noexcept {
+    return std::coroutine_handle<P>::from_promise(handle.promise());
   }
 };
 
@@ -55,8 +55,8 @@ template<>
 struct handle_cast_t<void> {
   // Returns the implicitly casted handle (operator coroutine_handle<>()).
   template<typename Q>
-  std_::coroutine_handle<>
-  operator()(std_::coroutine_handle<Q> handle) const noexcept {
+  std::coroutine_handle<>
+  operator()(std::coroutine_handle<Q> handle) const noexcept {
     return handle;
   }
 };
@@ -219,10 +219,10 @@ struct TraceAwait : private T {
     class P,
     class AS = decltype(&T::await_suspend),
     class = std::enable_if_t<
-      std::is_invocable_v<AS, T &, std_::coroutine_handle<P>>
+      std::is_invocable_v<AS, T &, std::coroutine_handle<P>>
     >
   >
-  decltype(auto) await_suspend(std_::coroutine_handle<P> handle)
+  decltype(auto) await_suspend(std::coroutine_handle<P> handle)
     noexcept(AwaitSuspendNoexcept<T, P>)
   {
     logger("await_suspend");
@@ -234,11 +234,11 @@ struct TraceAwait : private T {
     class PB = typename P::base,
     class AS = decltype(&T::await_suspend),
     class = std::enable_if_t<
-      std::is_invocable_v<AS, T &, std_::coroutine_handle<PB>> &&
-      !std::is_invocable_v<AS, T &, std_::coroutine_handle<P>>
+      std::is_invocable_v<AS, T &, std::coroutine_handle<PB>> &&
+      !std::is_invocable_v<AS, T &, std::coroutine_handle<P>>
     >
   >
-  decltype(auto) await_suspend(std_::coroutine_handle<P> handle)
+  decltype(auto) await_suspend(std::coroutine_handle<P> handle)
     noexcept(AwaitSuspendNoexcept<T, PB>)
   {
     logger("await_suspend");
@@ -258,7 +258,7 @@ TraceAwait(std::string, T &&) -> TraceAwait<T>;
 
 template<traits::BasicTaskTraits T>
 struct TraceTraits : public T {
-  using initial_suspend_type = TraceAwait<std_::suspend_never>;
+  using initial_suspend_type = TraceAwait<std::suspend_never>;
 };
 
 template<
@@ -278,14 +278,14 @@ struct Trace<TaskT<T, Traits>> : public TaskT<T, TraceTraits<Traits>> {
   struct promise_type;
 
 private:
-  static std_::coroutine_handle<base_promise_type>
-  to_base(std_::coroutine_handle<promise_type> ch) noexcept {
-    return std_::coroutine_handle<base_promise_type>::from_promise(
+  static std::coroutine_handle<base_promise_type>
+  to_base(std::coroutine_handle<promise_type> ch) noexcept {
+    return std::coroutine_handle<base_promise_type>::from_promise(
       ch.promise());
   }
 
 public:
-  explicit Trace(std_::coroutine_handle<promise_type> coroutine) noexcept
+  explicit Trace(std::coroutine_handle<promise_type> coroutine) noexcept
     : base{to_base(coroutine)}, logger{"task"}
   {
     logger("init promise=", coroutine.promise().logger.name);
@@ -313,13 +313,13 @@ public:
 
   template<typename B = base, typename = decltype(&B::await_suspend)>
   decltype(auto)
-  await_suspend(std_::coroutine_handle<> continuation)
+  await_suspend(std::coroutine_handle<> continuation)
     noexcept(AwaitSuspendNoexcept<base>)
   {
     logger("await_suspend");
     if constexpr (
       std::is_invocable_v<decltype(&base::await_suspend), base &,
-                          std_::coroutine_handle<>>) {
+                          std::coroutine_handle<>>) {
       return this->base::await_suspend(continuation);
     } else {
       return this->base::await_suspend();
@@ -353,9 +353,9 @@ public:
 
     Trace get_return_object()
       noexcept(std::is_nothrow_constructible_v<
-        Trace, std_::coroutine_handle<promise_type>>)
+        Trace, std::coroutine_handle<promise_type>>)
     {
-      Trace task(std_::coroutine_handle<promise_type>::from_promise(*this));
+      Trace task(std::coroutine_handle<promise_type>::from_promise(*this));
       return task;
     }
 
@@ -460,7 +460,7 @@ Trace<TaskT> lifecycle_s(int n) {
 template<typename TaskT>
 Trace<TaskT> lifecycle_a(int n) {
   while (n--) {
-    co_await TraceAwait<std_::suspend_always>{"suspend_always"};
+    co_await TraceAwait<std::suspend_always>{"suspend_always"};
   }
   co_return n; // -1
 }
@@ -496,28 +496,28 @@ Trace<FireAndForget> lifecycle_f(std::string &result) {
 
 std::string test_lifecycle_f() {
   union ManualScope {
-    struct {
+    struct ScopeImpl {
       TraceLogger logger;
       Trace<FireAndForget> task;
-    };
+    } impl;
     ManualScope() noexcept {}
     ~ManualScope() {}
   };
 
   std::string result;
   ManualScope scope;
-  new (&scope.logger) TraceLogger("executor");
-  scope.logger("init");
+  new (&scope.impl.logger) TraceLogger("executor");
+  scope.impl.logger("init");
   {
-    new (&scope.task) Trace<FireAndForget>{lifecycle_f(result)};
-    auto coro = scope.task.detach();
-    scope.task.~Trace<FireAndForget>();
+    new (&scope.impl.task) Trace<FireAndForget>{lifecycle_f(result)};
+    auto coro = scope.impl.task.detach();
+    scope.impl.task.~Trace<FireAndForget>();
     coro.resume();
   }
-  scope.logger("result=", result);
-  scope.logger("destroy");
-  std::string s = scope.logger.get();
-  scope.logger.~TraceLogger();
+  scope.impl.logger("result=", result);
+  scope.impl.logger("destroy");
+  std::string s = scope.impl.logger.get();
+  scope.impl.logger.~TraceLogger();
   REQUIRE(TraceLogger::get_state_counter() == 0);
   return s;
 }

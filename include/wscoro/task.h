@@ -15,10 +15,10 @@ public:
   using promise_type = P;
 
 protected:
-  std_::coroutine_handle<promise_type> _coroutine;
+  std::coroutine_handle<promise_type> _coroutine;
 
 public:
-  constexpr CoroutineBase(std_::coroutine_handle<promise_type> coroutine)
+  constexpr CoroutineBase(std::coroutine_handle<promise_type> coroutine)
     noexcept
     : _coroutine{coroutine}
   {}
@@ -76,7 +76,7 @@ protected:
   //   return _coroutine.promise();
   // }
 
-  std_::coroutine_handle<promise_type> detach() noexcept {
+  std::coroutine_handle<promise_type> detach() noexcept {
     auto coroutine = _coroutine;
     _coroutine = nullptr;
     return coroutine;
@@ -107,7 +107,7 @@ class BasicCoroutine :
 public:
   using typename base::promise_type;
 
-  BasicCoroutine(std_::coroutine_handle<promise_type> coroutine) noexcept
+  BasicCoroutine(std::coroutine_handle<promise_type> coroutine) noexcept
     : base{coroutine}
   {}
 
@@ -154,7 +154,7 @@ public:
 
   using is_async = typename Traits::is_async;
 
-  constexpr BasicTask(std_::coroutine_handle<promise_type> coroutine) noexcept
+  constexpr BasicTask(std::coroutine_handle<promise_type> coroutine) noexcept
     : base{coroutine}
   {}
 
@@ -168,8 +168,8 @@ public:
   bool await_ready() const;
 
   // Should be const but clang and coroutine_handle::resume.
-  std_::coroutine_handle<>
-  await_suspend(std_::coroutine_handle<> continuation)
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<> continuation)
     noexcept(Traits::is_async::value);
 
   // If exception behavior is to save and rethrow (handle_exceptions) and one
@@ -199,8 +199,8 @@ template<typename T, traits::BasicTaskTraits Traits>
 // requires
 //   (!std::is_void_v<T> || !Traits::is_generator::value) &&
 //   (Traits::is_async::value || !Traits::is_awaiter::value)
-std_::coroutine_handle<>
-BasicTask<T, Traits>::await_suspend(std_::coroutine_handle<> continuation)
+std::coroutine_handle<>
+BasicTask<T, Traits>::await_suspend(std::coroutine_handle<> continuation)
   noexcept(Traits::is_async::value)
 {
   if constexpr (!Traits::is_async::value) {
@@ -214,10 +214,10 @@ BasicTask<T, Traits>::await_suspend(std_::coroutine_handle<> continuation)
     // if constexpr (typename Traits::initial_suspend_type{}.await_ready()) {
     if constexpr (
       std::is_convertible_v<typename Traits::initial_suspend_type,
-                            std_::suspend_never>) {
+                            std::suspend_never>) {
       // If there is no initial suspend, the coroutine starts
       // automatically, so we should not resume it at an arbitrary location.
-      return std_::noop_coroutine();
+      return std::noop_coroutine();
     } else {
       // If there is an initial suspend, await is the mechanism to start the
       // coroutine.
