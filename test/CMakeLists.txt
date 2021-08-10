@@ -1,4 +1,4 @@
-find_package(Catch2 CONFIG REQUIRED)
+find_package(Catch2 3.0 REQUIRED)
 
 set(SOURCES
   test.cpp
