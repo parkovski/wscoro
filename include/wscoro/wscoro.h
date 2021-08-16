@@ -1,36 +1,74 @@
 #pragma once
 
-#include <type_traits>
-#include <memory>
-#include <cassert>
-#include <coroutine>
+#include "task.h"
+#include "promise.h"
+#include "value.h"
+#include "exception.h"
+#include "await.h"
+#include "suspend.h"
 
 namespace wscoro {
 
-namespace detail {
-  template<typename F> requires std::is_nothrow_invocable_v<F>
-  struct ScopeExit {
-    F f;
-    constexpr ScopeExit(F f) noexcept : f(std::move(f)) {}
-    ~ScopeExit() { f(); }
-  };
+template<class T>
+using Immediate = BasicTask<Promise<
+  value::BasicReturn<T>,
+  exception::SyncThrow,
+  await::DisableAwait,
+  suspend::BasicInitialSuspend<false>,
+  suspend::BasicFinalSuspend<true>
+>>;
 
-  // Use operator&& on a lambda.
-  struct ScopeExitHelper {
-    template<typename F>
-    constexpr ScopeExit<F> operator&&(F f) const noexcept {
-      return ScopeExit<F>(std::move(f));
-    }
-  };
-} // namespace detail
+template<class T>
+using Lazy = BasicTask<Promise<
+  value::BasicReturn<T>,
+  exception::SyncThrow,
+  await::DisableAwait,
+  suspend::BasicInitialSuspend<true>,
+  suspend::BasicFinalSuspend<true>
+>>;
 
-template<typename F>
-inline constexpr static detail::ScopeExit<F> scope_exit(F f) noexcept {
-  return {std::move(f)};
-}
+template<class T>
+using Task = BasicTask<Promise<
+  value::BasicReturn<T>,
+  exception::AsyncThrow,
+  await::EnableAwait<>,
+  suspend::BasicInitialSuspend<false>,
+  suspend::FinalSuspendWithContinuation
+>>;
 
-inline constexpr static detail::ScopeExitHelper scope_exit() noexcept {
-  return {};
-}
+template<class T>
+using DelayTask = BasicTask<Promise<
+  value::BasicReturn<T>,
+  exception::AsyncThrow,
+  await::EnableAwait<>,
+  suspend::BasicInitialSuspend<true>,
+  suspend::FinalSuspendWithContinuation
+>>;
+
+template<class T>
+using Generator = BasicGenerator<Promise<
+  value::BasicYield<T>,
+  exception::SyncThrow,
+  await::DisableAwait,
+  suspend::BasicInitialSuspend<true>,
+  suspend::BasicFinalSuspend<false>
+>>;
+
+template<class T>
+using AsyncGenerator = BasicGenerator<Promise<
+  value::YieldWithContinuation<T>,
+  exception::AsyncThrow,
+  await::EnableAwait<>,
+  suspend::BasicInitialSuspend<true>,
+  suspend::FinalSuspendWithContinuation
+>>;
+
+using FireAndForget = BasicCoroutine<Promise<
+  value::BasicReturn<void>,
+  exception::SyncThrow,
+  await::EnableAwait<>,
+  suspend::BasicInitialSuspend<false>,
+  suspend::BasicFinalSuspend<false>
+>>;
 
 } // namespace wscoro
