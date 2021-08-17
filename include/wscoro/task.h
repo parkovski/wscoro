@@ -4,17 +4,18 @@
 #include <type_traits>
 #include <coroutine>
 #include <optional>
+#include <cassert>
 
 namespace wscoro {
 
 namespace detail {
 
-template<class C>
+template<class C, class P>
 class CoroutineBase {
 public:
   friend struct std::hash<CoroutineBase>;
 
-  using promise_type = typename C::promise_type;
+  using promise_type = typename P::template type<C>;
 
 protected:
   std::coroutine_handle<promise_type> _handle;
@@ -73,18 +74,18 @@ public:
 } // namespace detail
 
 template<class P>
-class BasicCoroutine : public detail::CoroutineBase<BasicCoroutine<P>> {
+class BasicCoroutine : public detail::CoroutineBase<BasicCoroutine<P>, P> {
 public:
   using promise_type = typename P::template type<BasicCoroutine>;
 
   constexpr BasicCoroutine(std::coroutine_handle<promise_type> handle)
     noexcept
-    : detail::CoroutineBase<BasicCoroutine>{handle}
+    : detail::CoroutineBase<BasicCoroutine, P>{handle}
   {}
 };
 
 template<class P>
-class BasicTask : public detail::CoroutineBase<BasicTask<P>> {
+class BasicTask : public detail::CoroutineBase<BasicTask<P>, P> {
 public:
   using promise_type = typename P::template type<BasicTask>;
 
@@ -92,7 +93,7 @@ public:
   using value_type = typename promise_type::value_type;
 
   constexpr BasicTask(std::coroutine_handle<promise_type> handle) noexcept
-    : detail::CoroutineBase<BasicTask>{handle}
+    : detail::CoroutineBase<BasicTask, P>{handle}
   {}
 
   bool await_ready() const noexcept {
@@ -132,14 +133,15 @@ public:
 };
 
 template<class P>
-class BasicGenerator : public detail::CoroutineBase<BasicGenerator<P>> {
+class BasicGenerator : public detail::CoroutineBase<BasicGenerator<P>, P> {
+public:
   using promise_type = typename P::template type<BasicGenerator>;
 
   // The type produced by awaiting this task.
   using value_type = typename promise_type::value_type;
 
   constexpr BasicGenerator(std::coroutine_handle<promise_type> handle) noexcept
-    : detail::CoroutineBase<BasicGenerator>{handle}
+    : detail::CoroutineBase<BasicGenerator, P>{handle}
   {}
 
   bool await_ready() const noexcept {
@@ -167,7 +169,7 @@ class BasicGenerator : public detail::CoroutineBase<BasicGenerator<P>> {
   }
 
   std::optional<value_type> await_resume() const {
-    auto &promise = this->_coroutine.promise();
+    auto &promise = this->promise();
     promise.rethrow_exception();
     if (this->done()) {
       return std::nullopt;
@@ -180,9 +182,11 @@ class BasicGenerator : public detail::CoroutineBase<BasicGenerator<P>> {
 } // namespace wscoro
 
 namespace std {
-  template<class P>
-  struct hash<::wscoro::BasicCoroutine<P>> {
-    size_t operator()(const ::wscoro::BasicCoroutine<P> &co) const noexcept {
+  template<class C, class P>
+  struct hash<::wscoro::detail::CoroutineBase<C, P>> {
+    size_t operator()(const ::wscoro::detail::CoroutineBase<C, P> &co) const
+      noexcept
+    {
       return hash<remove_cvref_t<decltype(co._handle)>>{}(co._handle);
     }
   };

@@ -2,6 +2,7 @@
 
 #include <coroutine>
 #include <type_traits>
+#include <cassert>
 
 namespace wscoro {
 namespace detail {
@@ -44,7 +45,7 @@ public:
     return true;
   }
 
-  SuspendWithContinuation suspend_with_continuation() const noexcept {
+  SuspendWithContinuation suspend_with_continuation() noexcept {
     auto continuation = _continuation;
     _continuation = nullptr;
     return {continuation};
@@ -84,7 +85,7 @@ struct BasicFinalSuspend : detail::NoContinuation {
 };
 
 struct FinalSuspendWithContinuation : virtual detail::Continuation {
-  detail::SuspendWithContinuation final_suspend() const noexcept {
+  detail::SuspendWithContinuation final_suspend() noexcept {
     return this->suspend_with_continuation();
   }
 };

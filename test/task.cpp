@@ -1,8 +1,22 @@
-#include "wscoro/task.h"
+#include "wscoro/wscoro.h"
 
 #include <catch2/catch_all.hpp>
 
 using namespace wscoro;
+
+template<class F>
+struct ScopeExit {
+  F f;
+
+  ~ScopeExit() {
+    f();
+  }
+};
+
+template<class F>
+ScopeExit<F> scope_exit(F f) {
+  return ScopeExit<F>{std::move(f)};
+}
 
 Immediate<int> add_one(int value) {
   co_return value + 1;
@@ -23,9 +37,9 @@ static TTask<int> get_one(int &counter) {
   co_return 1;
 }
 
-TEST_CASE("Basic Task suspension", "[task]") {
+TEST_CASE("Basic DelayTask suspension", "[task]") {
   int counter = 0;
-  auto get_one = ::get_one<Task>(counter);
+  auto get_one = ::get_one<DelayTask>(counter);
   REQUIRE(counter == 0);
 
   get_one.resume();
@@ -39,9 +53,9 @@ TEST_CASE("Basic Task suspension", "[task]") {
   REQUIRE(get_one.await_resume() == 1);
 }
 
-TEST_CASE("Basic AutoTask suspension", "[task]") {
+TEST_CASE("Basic Task suspension", "[task]") {
   int counter = 0;
-  auto get_one = ::get_one<AutoTask>(counter);
+  auto get_one = ::get_one<Task>(counter);
   REQUIRE(counter == 1);
 
   get_one.resume();
@@ -51,7 +65,7 @@ TEST_CASE("Basic AutoTask suspension", "[task]") {
   REQUIRE(get_one.await_resume() == 1);
 }
 
-Lazy<> increment(int &x) {
+Lazy<void> increment(int &x) {
   x += 1;
   co_return;
 }

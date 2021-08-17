@@ -1,4 +1,4 @@
-#include "wscoro/task.h"
+#include "wscoro/wscoro.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -63,16 +63,16 @@ void test_suspend(int steps_a, int steps_b, const char *expected) {
 
 TEST_CASE("Suspension", "[task]") {
   test_suspend<
-    AutoTask<>, AutoTask<>>(0, 1,
+    Task<void>, Task<void>>(0, 1,
     "A: [A0, [B0], A1], B: [B1, [A2, AF], BF]");
   test_suspend<
-    Task<>, AutoTask<>>(1, 1,
+    DelayTask<void>, Task<void>>(1, 1,
     "A: [A0, [B0], A1], B: [B1, [A2, AF], BF]");
 
   test_suspend<
-    AutoTask<>, Task<>>(0, 1,
+    Task<void>, DelayTask<void>>(0, 1,
     "A: [A0, A1], [B0], B: [B1, [A2, AF], BF]");
   test_suspend<
-    Task<>, Task<>>(1, 1,
+    DelayTask<void>, DelayTask<void>>(1, 1,
     "A: [A0, A1], [B0], B: [B1, [A2, AF], BF]");
 }

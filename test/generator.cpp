@@ -1,4 +1,4 @@
-#include "wscoro/task.h"
+#include "wscoro/wscoro.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -25,7 +25,7 @@ static AsyncGenerator<int> async_fib() {
 }
 
 template<typename G>
-static AutoTask<std::string> get_seq(G generator, int rounds) {
+static Task<std::string> get_seq(G generator, int rounds) {
   std::stringstream ss;
   if (rounds > 0) {
     for (int i = 0; i < rounds - 1; i++) {

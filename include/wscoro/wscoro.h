@@ -9,7 +9,7 @@
 
 namespace wscoro {
 
-template<class T>
+template<class T = void>
 using Immediate = BasicTask<Promise<
   value::BasicReturn<T>,
   exception::SyncThrow,
@@ -18,7 +18,7 @@ using Immediate = BasicTask<Promise<
   suspend::BasicFinalSuspend<true>
 >>;
 
-template<class T>
+template<class T = void>
 using Lazy = BasicTask<Promise<
   value::BasicReturn<T>,
   exception::SyncThrow,
@@ -27,7 +27,7 @@ using Lazy = BasicTask<Promise<
   suspend::BasicFinalSuspend<true>
 >>;
 
-template<class T>
+template<class T = void>
 using Task = BasicTask<Promise<
   value::BasicReturn<T>,
   exception::AsyncThrow,
@@ -36,7 +36,7 @@ using Task = BasicTask<Promise<
   suspend::FinalSuspendWithContinuation
 >>;
 
-template<class T>
+template<class T = void>
 using DelayTask = BasicTask<Promise<
   value::BasicReturn<T>,
   exception::AsyncThrow,

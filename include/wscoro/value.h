@@ -55,24 +55,10 @@ public:
 
   // Move constructor equivalent for inner data.
   template<typename U = T>
-  T &init_data(
-    std::enable_if_t<std::is_move_constructible_v<U>, T> &&data
-  ) noexcept(std::is_nothrow_move_constructible_v<U>)
-  {
+  std::enable_if_t<std::is_constructible_v<T, U>, T &>
+  init_data(U &&data) noexcept(std::is_nothrow_constructible_v<T, U>) {
     free_data();
-    new (&_data) T(std::move(data));
-    _is_empty.clear(std::memory_order_release);
-    return _data;
-  }
-
-  // Copy constructor equivalent for inner data.
-  template<typename U = T>
-  T &init_data(
-    std::enable_if_t<std::is_copy_constructible_v<U>, T> const &data
-  ) noexcept(std::is_nothrow_copy_constructible_v<U>)
-  {
-    free_data();
-    new (&_data) T(data);
+    new (&_data) T(std::forward<U>(data));
     _is_empty.clear(std::memory_order_release);
     return _data;
   }
@@ -117,17 +103,17 @@ template<class R>
 struct BasicReturn : public detail::PromiseData<R> {
   using value_type = R;
 
-  void return_value(R &&value)
-    noexcept(noexcept(this->init_data(std::forward<R>(value))))
+  template<class T, class = std::enable_if_t<std::is_constructible_v<R, T>>>
+  void return_value(T &&value) noexcept(std::is_nothrow_constructible_v<R, T>)
   {
-    this->init_data(std::forward<R>(value));
+    this->init_data(std::forward<T>(value));
   }
 };
 
 /// Enables the `co_return;` statement. No return value storage is allocated
 /// for the coroutine.
 template<>
-struct BasicReturn<void> {
+struct BasicReturn<void> : public detail::PromiseData<void> {
   using value_type = void;
 
   constexpr void return_void() const noexcept {}
@@ -144,10 +130,10 @@ struct BasicYield : detail::PromiseData<Y> {
 
   void return_void() const noexcept {}
 
-  std::suspend_always yield_value(Y &&value)
-    noexcept(noexcept(this->init_data(std::forward<Y>(value))))
-  {
-    this->init_data(std::forward<Y>(value));
+  template<class T>
+  std::enable_if_t<std::is_constructible_v<Y, T>, std::suspend_always>
+  yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
+    this->init_data(std::forward<T>(value));
     return {};
   }
 };
@@ -159,10 +145,11 @@ struct YieldWithContinuation : detail::PromiseData<Y>,
 
   void return_void() const noexcept {}
 
-  detail::SuspendWithContinuation yield_value(Y &&value)
-    noexcept(noexcept(this->init_data(std::forward<Y>(value))))
-  {
-    this->init_data(std::forward<Y>(value));
+  template<class T>
+  std::enable_if_t<std::is_constructible_v<Y, T>,
+                   detail::SuspendWithContinuation>
+  yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
+    this->init_data(std::forward<T>(value));
     return this->suspend_with_continuation();
   }
 };

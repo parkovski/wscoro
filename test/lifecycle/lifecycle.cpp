@@ -1,6 +1,6 @@
 #include "lifecycle-results.h"
 
-#include "wscoro/task.h"
+#include "wscoro/wscoro.h"
 
 #include <catch2/catch_all.hpp>
 
@@ -530,11 +530,11 @@ TEST_CASE("Lifecycle", "[lifecycle]") {
   CHECK(test_lifecycle_a<2, 0>(&lifecycle_s<Lazy<int>>) ==
           lcresult<Lazy<>>);
 
-  CHECK(test_lifecycle_a<3, 3>(&lifecycle_a<Task<int>>) ==
-        lcresult<Task<>>);
+  CHECK(test_lifecycle_a<3, 3>(&lifecycle_a<DelayTask<int>>) ==
+        lcresult<DelayTask<>>);
 
-  CHECK(test_lifecycle_a<3, 2>(&lifecycle_a<AutoTask<int>>) ==
-        lcresult<AutoTask<>>);
+  CHECK(test_lifecycle_a<3, 2>(&lifecycle_a<Task<int>>) ==
+        lcresult<Task<>>);
 
   CHECK(test_lifecycle_a<3, 0>(&lifecycle_y<Generator<int>>) ==
         lcresult<Generator<int>>);

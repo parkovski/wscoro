@@ -19,7 +19,7 @@ struct Promise {
     Task get_return_object() noexcept(
       std::is_nothrow_constructible_v<Task, std::coroutine_handle<type>>)
     {
-      return {std::coroutine_handle<type>::from_promise(this)};
+      return {std::coroutine_handle<type>::from_promise(*this)};
     }
   };
 };

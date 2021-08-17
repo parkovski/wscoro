@@ -5,7 +5,7 @@ set(SOURCES
   task.cpp
   generator.cpp
   suspend.cpp
-  lifecycle/lifecycle.cpp
+  #lifecycle/lifecycle.cpp
 )
 
 add_executable(test ${SOURCES})

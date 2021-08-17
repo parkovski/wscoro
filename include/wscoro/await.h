@@ -30,7 +30,7 @@ struct ThisCoroutineTag final {};
 namespace await {
 
 /// Disables the `co_await` operator by marking `await_transform` as deleted.
-struct DisableAwait final {
+struct DisableAwait {
   void await_transform() = delete;
 };
 
@@ -39,7 +39,7 @@ struct DisableAwait final {
 /// \param Transforms A list of default constructible types each containing an
 ///        `await_transform` method.
 template<class... Transforms>
-struct EnableAwait final : public Transforms... {
+struct EnableAwait : public Transforms... {
   template<class T>
   decltype(auto) await_transform(T &&t) const noexcept {
     return std::forward<T>(t);
@@ -51,7 +51,7 @@ struct EnableAwait final : public Transforms... {
 /// \param Transforms A list of default constructible types each containing an
 ///        `await_transform` method.
 template<class... Transforms>
-struct OnlyAwait final : public Transforms... {};
+struct OnlyAwait : public Transforms... {};
 
 /// Enables the expression `co_await wscoro::this_coroutine` which returns a
 /// handle to the current coroutine.

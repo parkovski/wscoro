@@ -1,6 +1,6 @@
 #pragma once
 
-#include "wscoro/task.h"
+#include "wscoro/wscoro.h"
 
 template<typename TaskT>
 struct lcresult_t;
@@ -25,10 +25,10 @@ LCRESULT(Immediate) =
 LCRESULT(Lazy) =
 #include "lc-lazy.txt"
 
-LCRESULT(Task) =
+LCRESULT(DelayTask) =
 #include "lc-task.txt"
 
-LCRESULT(AutoTask) =
+LCRESULT(Task) =
 #include "lc-autotask.txt"
 
 LCRESULT(Generator) =
