@@ -27,6 +27,19 @@ public:
     : _handle{handle}
   {}
 
+  CoroutineBase(const CoroutineBase &) = delete;
+  CoroutineBase &operator=(const CoroutineBase &) = delete;
+
+  CoroutineBase(CoroutineBase &&o) noexcept : _handle{o._handle} {
+    o._handle = nullptr;
+  }
+
+  CoroutineBase &operator=(CoroutineBase &&o) {
+    _handle = o._handle;
+    o._handle = nullptr;
+    return *this;
+  }
+
   friend void swap(CoroutineBase &a, CoroutineBase &b) noexcept {
     using std::swap;
     swap(a._handle, b._handle);
@@ -74,6 +87,9 @@ public:
   using typename base::promise_type;
 
   using base::base;
+
+  BasicCoroutine(BasicCoroutine &&) = default;
+  BasicCoroutine &operator=(BasicCoroutine &&) = default;
 };
 
 template<class P>
@@ -90,6 +106,9 @@ public:
   using value_type = typename promise_type::value_type;
 
   using base::base;
+
+  BasicTask(BasicTask &&) = default;
+  BasicTask &operator=(BasicTask &&) = default;
 
   ~BasicTask() {
     if (this->_handle) {
@@ -144,6 +163,9 @@ public:
   using value_type = std::optional<typename promise_type::value_type>;
 
   using base::base;
+
+  BasicGenerator(BasicGenerator &&) = default;
+  BasicGenerator &operator=(BasicGenerator &&) = default;
 
   ~BasicGenerator() {
     if (this->_handle) {

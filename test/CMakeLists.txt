@@ -1,15 +1,14 @@
 find_package(Catch2 3.0 REQUIRED)
 
 set(SOURCES
-  test.cpp
-  task.cpp
+  basic.cpp
   generator.cpp
   suspend.cpp
-  #lifecycle/lifecycle.cpp
+  continue.cpp
 )
 
 add_executable(test ${SOURCES})
-target_link_libraries(test Catch2::Catch2 wscoro)
+target_link_libraries(test Catch2::Catch2WithMain wscoro)
 
 include(CTest)
 include(Catch)
