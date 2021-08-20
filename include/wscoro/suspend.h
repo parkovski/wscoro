@@ -20,10 +20,10 @@ using BasicSuspend =
 struct SuspendWithContinuation {
   std::coroutine_handle<> _continuation;
 
-  bool await_ready() const noexcept { return !_continuation; }
+  constexpr bool await_ready() const noexcept { return false; }
 
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<>) noexcept {
+  constexpr std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<>) const noexcept {
     if (_continuation) {
       return _continuation;
     } else {
@@ -31,12 +31,12 @@ struct SuspendWithContinuation {
     }
   }
 
-  void await_resume() const noexcept {}
+  constexpr void await_resume() const noexcept {}
 };
 
 struct Continuation {
 private:
-  std::coroutine_handle<> _continuation;
+  std::coroutine_handle<> _continuation = nullptr;
 
 public:
   bool set_continuation(std::coroutine_handle<> continuation) noexcept {
@@ -53,7 +53,7 @@ public:
 };
 
 struct NoContinuation {
-  constexpr bool set_continuation(std::coroutine_handle<>) noexcept {
+  constexpr bool set_continuation(std::coroutine_handle<>) const noexcept {
     return false;
   }
 };
@@ -63,9 +63,21 @@ struct NoContinuation {
 namespace suspend {
 
 /// Provides an `initial_suspend` that either always or never suspends.
+///
+/// The initial suspend determines whether the coroutine starts executing at
+/// creation time or waits until it is first resumed, either by a call to
+/// `resume()`, `operator()()`, or by the `co_await` operator. The behavior of
+/// using `co_await` on the task depends on whether or not it suspended
+/// initially. This should usually be determined at the type level, but wscoro
+/// allows it to be determined at runtime by implementing the
+/// `did_initial_suspend()` method and returning the same value as
+/// `initial_suspend().await_ready()` for the current instance.
+///
 /// \param Suspend Determines whether the coroutine suspends initially.
 template<bool Suspend>
 struct BasicInitialSuspend {
+  /// This method must return the same value as
+  /// `initial_suspend().await_ready()`.
   constexpr bool did_initial_suspend() const noexcept {
     return Suspend;
   }
@@ -76,6 +88,11 @@ struct BasicInitialSuspend {
 };
 
 /// Provides a `final_suspend` that either always or never suspends.
+///
+/// The final suspend allows the awaiter of the coroutine to obtain the value
+/// it produced, therefore the final suspend should only be disabled for
+/// coroutines that return `void`.
+///
 /// \param Suspend Determines whether the coroutine suspends on completion.
 template<bool Suspend>
 struct BasicFinalSuspend : detail::NoContinuation {
@@ -84,6 +101,7 @@ struct BasicFinalSuspend : detail::NoContinuation {
   }
 };
 
+/// Provides a `final_suspend` that can store and resume a continuation.
 struct FinalSuspendWithContinuation : virtual detail::Continuation {
   detail::SuspendWithContinuation final_suspend() noexcept {
     return this->suspend_with_continuation();

@@ -12,7 +12,7 @@ namespace detail {
 
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
-template<typename T, size_t Align = alignof(std::max_align_t)>
+template<typename T, size_t Align = 0>
 struct alignas(Align) PromiseData {
 private:
   union {
@@ -55,28 +55,27 @@ public:
 
   // Move constructor equivalent for inner data.
   template<typename U = T>
-  std::enable_if_t<std::is_constructible_v<T, U>, T &>
+  std::enable_if_t<std::is_constructible_v<T, U>>
   init_data(U &&data) noexcept(std::is_nothrow_constructible_v<T, U>) {
     free_data();
     new (&_data) T(std::forward<U>(data));
     _is_empty.clear(std::memory_order_release);
-    return _data;
   }
 
   // Returns a const reference to the inner data.
-  const T &data() const & {
+  const T &data() const & noexcept {
     assert(has_value());
     return _data;
   }
 
   // Returns a reference to the inner data.
-  T &data() & {
+  T &data() & noexcept {
     assert(has_value());
     return _data;
   }
 
   // Consumes and returns the inner data by move constructor.
-  T data() && {
+  T data() && noexcept {
     [[maybe_unused]] bool is_empty =
       _is_empty.test_and_set(std::memory_order_acq_rel);
     assert(!is_empty);
@@ -84,11 +83,12 @@ public:
   }
 };
 
-template<size_t Align>
-struct PromiseData<void, Align> {
-  constexpr bool has_value() const noexcept {
+template<>
+struct PromiseData<void, 0> {
+  bool has_value() const noexcept {
     return false;
   }
+
   void data() const noexcept {}
 };
 
@@ -99,11 +99,14 @@ namespace value {
 /// Enables the `co_return r;` statement where `r` is implicitly convertible
 /// to type `R`.
 /// \param R The coroutine's return type.
-template<class R>
-struct BasicReturn : public detail::PromiseData<R> {
+/// \param Align The alignment of the promise return data. The default value 0
+///        uses the default alignment of `R`.
+template<class R, size_t Align = 0>
+struct BasicReturn : detail::PromiseData<R, Align> {
   using value_type = R;
 
-  template<class T, class = std::enable_if_t<std::is_constructible_v<R, T>>>
+  template<class T = R,
+           class = std::enable_if_t<std::is_constructible_v<R, T>>>
   void return_value(T &&value) noexcept(std::is_nothrow_constructible_v<R, T>)
   {
     this->init_data(std::forward<T>(value));
@@ -113,7 +116,7 @@ struct BasicReturn : public detail::PromiseData<R> {
 /// Enables the `co_return;` statement. No return value storage is allocated
 /// for the coroutine.
 template<>
-struct BasicReturn<void> : public detail::PromiseData<void> {
+struct BasicReturn<void, 0> : detail::PromiseData<void> {
   using value_type = void;
 
   constexpr void return_void() const noexcept {}
@@ -122,32 +125,39 @@ struct BasicReturn<void> : public detail::PromiseData<void> {
 /// Enables the `co_yield y;` statement where `y` is implicitly convertible to
 /// type `Y` and the `co_return;` statement.
 /// \param Y The coroutine's yield type (generator return type).
-/// \param Suspend An `Awaitable` that defines the coroutine's behavior at a
-///        yield point.
-template<class Y>
-struct BasicYield : detail::PromiseData<Y> {
+/// \param Align The alignment of the promise return data. The default value 0
+///        uses the default alignment of `R`.
+template<class Y, size_t Align = 0>
+struct BasicYield : detail::PromiseData<Y, Align> {
   using value_type = Y;
 
   void return_void() const noexcept {}
 
-  template<class T>
-  std::enable_if_t<std::is_constructible_v<Y, T>, std::suspend_always>
+  template<class T = Y,
+           class = std::enable_if_t<std::is_constructible_v<Y, T>>>
+  std::suspend_always
   yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
     this->init_data(std::forward<T>(value));
     return {};
   }
 };
 
-template<class Y>
-struct YieldWithContinuation : detail::PromiseData<Y>,
+/// Enables the `co_yield y;` statement where `y` is implicitly convertible to
+/// type `Y` and the `co_return;` statement. Resumes the awaiter asynchronously
+/// when finished.
+/// \param Y The coroutine's yield type (generator return type).
+/// \param Align The alignment of the promise return data. The default value 0
+///        uses the default alignment of `R`.
+template<class Y, size_t Align = 0>
+struct YieldWithContinuation : detail::PromiseData<Y, Align>,
                                virtual detail::Continuation {
   using value_type = Y;
 
   void return_void() const noexcept {}
 
-  template<class T>
-  std::enable_if_t<std::is_constructible_v<Y, T>,
-                   detail::SuspendWithContinuation>
+  template<class T = Y,
+           class = std::enable_if_t<std::is_constructible_v<Y, T>>>
+  detail::SuspendWithContinuation
   yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
     this->init_data(std::forward<T>(value));
     return this->suspend_with_continuation();

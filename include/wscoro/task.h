@@ -10,47 +10,33 @@ namespace wscoro {
 
 namespace detail {
 
-template<class C, class P>
-class CoroutineBase {
+/// Coroutine base type.
+/// \param P The promise type.
+template<class P>
+struct CoroutineBase {
 public:
   friend struct std::hash<CoroutineBase>;
 
-  using promise_type = typename P::template type<C>;
+  using promise_type = P;
 
 protected:
   std::coroutine_handle<promise_type> _handle;
 
-  promise_type &promise() const {
-    return _handle.promise();
-  }
-
 public:
-  constexpr CoroutineBase(std::coroutine_handle<promise_type> handle)
-    noexcept
+  explicit CoroutineBase(std::coroutine_handle<promise_type> handle) noexcept
     : _handle{handle}
   {}
-
-  CoroutineBase(const CoroutineBase &) = default;
-  CoroutineBase &operator=(const CoroutineBase &) = default;
-
-  constexpr CoroutineBase(CoroutineBase &&o) noexcept
-    : _handle{o._handle}
-  {
-    o._handle = nullptr;
-  }
-
-  constexpr CoroutineBase &operator=(CoroutineBase &&o) noexcept {
-    _handle = o._handle;
-    o._handle = nullptr;
-    return *this;
-  }
 
   friend void swap(CoroutineBase &a, CoroutineBase &b) noexcept {
     using std::swap;
     swap(a._handle, b._handle);
   }
 
-  bool done() const {
+  promise_type &promise() const noexcept {
+    return _handle.promise();
+  }
+
+  bool done() const noexcept {
     return _handle && _handle.done();
   }
 
@@ -68,33 +54,48 @@ public:
 
   void destroy() {
     _handle.destroy();
+    _handle = nullptr;
   }
 };
 
 } // namespace detail
 
+/// This type is not awaitable and it does not destroy the coroutine when it
+/// finishes - the coroutine is entirely on its own.
+/// \param P The coroutine's promise type.
 template<class P>
-class BasicCoroutine : public detail::CoroutineBase<BasicCoroutine<P>, P> {
-public:
-  using promise_type = typename P::template type<BasicCoroutine>;
+struct BasicCoroutine
+  : detail::CoroutineBase<typename P::template type<BasicCoroutine<P>>>
+{
+  using base =
+    detail::CoroutineBase<typename P::template type<BasicCoroutine<P>>>;
 
-  constexpr BasicCoroutine(std::coroutine_handle<promise_type> handle)
-    noexcept
-    : detail::CoroutineBase<BasicCoroutine, P>{handle}
-  {}
+public:
+  using typename base::promise_type;
+
+  using base::base;
 };
 
 template<class P>
-class BasicTask : public detail::CoroutineBase<BasicTask<P>, P> {
+struct BasicTask
+  : detail::CoroutineBase<typename P::template type<BasicTask<P>>>
+{
+  using base =
+    detail::CoroutineBase<typename P::template type<BasicTask<P>>>;
+
 public:
-  using promise_type = typename P::template type<BasicTask>;
+  using typename base::promise_type;
 
   // The type produced by awaiting this task.
   using value_type = typename promise_type::value_type;
 
-  constexpr BasicTask(std::coroutine_handle<promise_type> handle) noexcept
-    : detail::CoroutineBase<BasicTask, P>{handle}
-  {}
+  using base::base;
+
+  ~BasicTask() {
+    if (this->_handle) {
+      this->_handle.destroy();
+    }
+  }
 
   bool await_ready() const noexcept {
     return this->done();
@@ -120,11 +121,9 @@ public:
     }
   }
 
-  // If exception behavior is to save and rethrow (handle_exceptions) and one
+  // If exception behavior is to save and rethrow (AsyncThrow) and one
   // was thrown and not caught, it will be rethrown here. For non-void types,
   // this returns the value from the inner coroutine's co_return.
-  // If the type is configured to copy instead of move, the data is not
-  // consumed.
   value_type await_resume() const {
     auto &promise = this->promise();
     promise.rethrow_exception();
@@ -133,16 +132,24 @@ public:
 };
 
 template<class P>
-class BasicGenerator : public detail::CoroutineBase<BasicGenerator<P>, P> {
+struct BasicGenerator
+  : detail::CoroutineBase<typename P::template type<BasicGenerator<P>>>
+{
+  using base =
+    detail::CoroutineBase<typename P::template type<BasicGenerator<P>>>;
+
 public:
-  using promise_type = typename P::template type<BasicGenerator>;
+  using typename base::promise_type;
 
-  // The type produced by awaiting this task.
-  using value_type = typename promise_type::value_type;
+  using value_type = std::optional<typename promise_type::value_type>;
 
-  constexpr BasicGenerator(std::coroutine_handle<promise_type> handle) noexcept
-    : detail::CoroutineBase<BasicGenerator, P>{handle}
-  {}
+  using base::base;
+
+  ~BasicGenerator() {
+    if (this->_handle) {
+      this->_handle.destroy();
+    }
+  }
 
   bool await_ready() const noexcept {
     return this->promise().has_value() || this->done();
@@ -157,34 +164,30 @@ public:
       return continuation;
     }
 
-    if (promise.did_initial_suspend()) {
-      // If there is an initial suspend, await is the mechanism to start the
-      // coroutine.
-      return this->_handle;
-    } else {
-      // If there is no initial suspend, the coroutine already started
-      // automatically, so we should not resume it at an arbitrary location.
-      return std::noop_coroutine();
-    }
+    // Generators should always suspend initially since they can be awaited
+    // multiple times. Without an initial suspend, the behavior of the first
+    // await would differ from all the others.
+    assert(promise.did_initial_suspend());
+    return this->_handle;
   }
 
-  std::optional<value_type> await_resume() const {
+  value_type await_resume() const {
     auto &promise = this->promise();
     promise.rethrow_exception();
     if (this->done()) {
       return std::nullopt;
     }
     assert(promise.has_value());
-    return std::move(promise).data();
+    return value_type{std::move(promise).data()};
   }
 };
 
 } // namespace wscoro
 
 namespace std {
-  template<class C, class P>
-  struct hash<::wscoro::detail::CoroutineBase<C, P>> {
-    size_t operator()(const ::wscoro::detail::CoroutineBase<C, P> &co) const
+  template<class P>
+  struct hash<::wscoro::detail::CoroutineBase<P>> {
+    size_t operator()(const ::wscoro::detail::CoroutineBase<P> &co) const
       noexcept
     {
       return hash<remove_cvref_t<decltype(co._handle)>>{}(co._handle);
