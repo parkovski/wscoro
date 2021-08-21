@@ -133,3 +133,12 @@ TEST_CASE("Basic ImmediateTask suspension", "[basic][task]") {
 
   REQUIRE(get_one.await_resume() == 1);
 }
+
+Task<std::coroutine_handle<>> get_this_coroutine() {
+  co_return co_await this_coroutine;
+}
+
+TEST_CASE("Get current coroutine handle", "[basic][task]") {
+  auto t = get_this_coroutine();
+  t.resume();
+}

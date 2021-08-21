@@ -46,7 +46,9 @@ struct DisableAwait final {
 template<template<class> class... Transforms>
 struct EnableAwait final {
   template<class P>
-  struct type : public Transforms<P>... {
+  struct type : Transforms<P>... {
+    using Transforms<P>::await_transform...;
+
     template<class T>
     decltype(auto) await_transform(T &&t) const noexcept {
       return std::forward<T>(t);
@@ -61,7 +63,7 @@ struct EnableAwait final {
 template<template<class> class... Transforms>
 struct OnlyAwait final {
   template<class P>
-  struct type : public Transforms<P>... {};
+  struct type : Transforms<P>... {};
 };
 
 /// Enables the expression `co_await wscoro::this_coroutine` which returns a
