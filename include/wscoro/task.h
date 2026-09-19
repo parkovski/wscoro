@@ -50,7 +50,7 @@ public:
   }
 
   bool done() const noexcept {
-    return _handle && _handle.done();
+    return !_handle || _handle.done();
   }
 
   explicit operator bool() const noexcept {
