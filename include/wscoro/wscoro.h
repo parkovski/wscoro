@@ -83,7 +83,7 @@ using AsyncGenerator = BasicGenerator<Promise<
 using FireAndForget = BasicCoroutine<Promise<
   value::BasicReturn<void>,
   exception::SyncThrow,
-  await::EnableAwait<>,
+  await::EnableAwait<await::ThisCoroutine>,
   suspend::BasicInitialSuspend<false>,
   suspend::BasicFinalSuspend<false>
 >>;
