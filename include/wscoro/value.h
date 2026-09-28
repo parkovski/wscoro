@@ -31,7 +31,7 @@ protected:
 
 public:
   PromiseData() noexcept {
-    _is_empty.test_and_set(std::memory_order_acq_rel);
+    _is_empty.test_and_set(std::memory_order_release);
   }
 
   PromiseData(PromiseData &&) = delete;
