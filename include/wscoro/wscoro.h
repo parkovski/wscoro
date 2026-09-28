@@ -27,7 +27,7 @@ using Immediate = BasicTask<Promise<
 template<class T = void>
 using Lazy = BasicTask<Promise<
   value::BasicReturn<T>,
-  exception::SyncThrow,
+  exception::AsyncThrow,
   await::DisableAwait,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
