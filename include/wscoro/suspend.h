@@ -70,13 +70,13 @@ namespace suspend {
 /// using `co_await` on the task depends on whether or not it suspended
 /// initially. This should usually be determined at the type level, but wscoro
 /// allows it to be determined at runtime by implementing the
-/// `did_initial_suspend()` method and returning the same value as
+/// `did_initial_suspend()` method and returning the opposite value as
 /// `initial_suspend().await_ready()` for the current instance.
 ///
 /// \param Suspend Determines whether the coroutine suspends initially.
 template<bool Suspend>
 struct BasicInitialSuspend {
-  /// This method must return the same value as
+  /// This method must return the opposite value as
   /// `initial_suspend().await_ready()`.
   constexpr bool did_initial_suspend() const noexcept {
     return Suspend;
