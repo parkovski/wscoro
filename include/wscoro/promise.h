@@ -8,8 +8,6 @@ namespace wscoro {
 template<class Return, class Catch, class Await,
          class InitialSuspend, class FinalSuspend>
 struct Promise {
-  using value_type = typename Return::value_type;
-
   template<class Task>
   struct type :
     public Return,
