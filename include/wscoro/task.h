@@ -120,24 +120,8 @@ public:
     return this->done();
   }
 
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<> continuation) const {
-    auto &promise = this->promise();
-    if (!promise.set_continuation(continuation)) {
-      // Can't store the continuation - execute synchronously.
-      this->resume();
-      return continuation;
-    }
-
-    if (promise.did_initial_suspend()) {
-      // If there is an initial suspend, await is the mechanism to start the
-      // coroutine.
-      return this->_handle;
-    } else {
-      // If there is no initial suspend, the coroutine already started
-      // automatically, so we should not resume it at an arbitrary location.
-      return std::noop_coroutine();
-    }
+  bool await_suspend(std::coroutine_handle<promise_type>) const noexcept {
+    return false;
   }
 
   // If exception behavior is to save and rethrow (AsyncThrow) and one
@@ -177,20 +161,11 @@ public:
     return this->promise().has_value() || this->done();
   }
 
-  std::coroutine_handle<>
-  await_suspend(std::coroutine_handle<> continuation) const {
-    auto &promise = this->promise();
-    if (!promise.set_continuation(continuation)) {
-      // Can't store the continuation - execute synchronously.
-      this->resume();
-      return continuation;
-    }
-
+  bool await_suspend(std::coroutine_handle<promise_type>) const noexcept {
     // Generators should always suspend initially since they can be awaited
     // multiple times. Without an initial suspend, the behavior of the first
     // await would differ from all the others.
-    assert(promise.did_initial_suspend());
-    return this->_handle;
+    return false;
   }
 
   value_type await_resume() const {
