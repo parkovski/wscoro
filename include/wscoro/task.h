@@ -34,11 +34,7 @@ public:
     o._handle = nullptr;
   }
 
-  CoroutineBase &operator=(CoroutineBase &&o) {
-    _handle = o._handle;
-    o._handle = nullptr;
-    return *this;
-  }
+  CoroutineBase &operator=(CoroutineBase &&o) = delete;
 
   friend void swap(CoroutineBase &a, CoroutineBase &b) noexcept {
     using std::swap;
@@ -89,7 +85,6 @@ public:
   using base::base;
 
   BasicCoroutine(BasicCoroutine &&) = default;
-  BasicCoroutine &operator=(BasicCoroutine &&) = default;
 };
 
 template<class P>
@@ -108,7 +103,6 @@ public:
   using base::base;
 
   BasicTask(BasicTask &&) = default;
-  BasicTask &operator=(BasicTask &&) = default;
 
   ~BasicTask() {
     if (this->_handle) {
@@ -149,7 +143,6 @@ public:
   using base::base;
 
   BasicGenerator(BasicGenerator &&) = default;
-  BasicGenerator &operator=(BasicGenerator &&) = default;
 
   ~BasicGenerator() {
     if (this->_handle) {
