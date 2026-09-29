@@ -70,9 +70,15 @@ public:
 
   // Consumes and returns the inner data by move constructor.
   T data() && noexcept {
-    [[maybe_unused]] bool is_empty =
-      _is_empty.test_and_set(std::memory_order_acq_rel);
-    assert(!is_empty);
+    [[maybe_unused]] bool was_empty =
+      _is_empty.test_and_set(
+#ifdef NDEBUG
+        std::memory_order_release
+#else
+        std::memory_order_acq_rel
+#endif
+      );
+    assert(!was_empty);
     return std::move(_data);
   }
 };
