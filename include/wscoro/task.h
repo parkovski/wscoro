@@ -161,7 +161,7 @@ protected:
   const G &_gen;
 
 public:
-  BasicTaskAwaiter(const G &gen) noexcept
+  BasicGeneratorAwaiter(const G &gen) noexcept
     : _gen{gen}
   {}
 
