@@ -5,16 +5,13 @@
 
 namespace wscoro {
 
-template<class Return, class Catch, class Await,
-         class InitialSuspend, class FinalSuspend>
+template<class Return, class Await, class... Mixins>
 struct Promise {
   template<class Task>
   struct type :
     public Return,
-    public Catch,
     public Await::template type<type<Task>>,
-    public InitialSuspend,
-    public FinalSuspend
+    public Mixins...
   {
     using value_type = typename Return::value_type;
 
