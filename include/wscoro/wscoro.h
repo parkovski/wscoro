@@ -15,8 +15,8 @@ namespace wscoro {
 template<class T = void>
 using Immediate = BasicTask<Promise<
   value::BasicReturn<T>,
-  exception::SyncThrow,
   await::DisableAwait,
+  exception::SyncThrow,
   suspend::BasicInitialSuspend<false>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -27,8 +27,8 @@ using Immediate = BasicTask<Promise<
 template<class T = void>
 using Lazy = BasicTask<Promise<
   value::BasicReturn<T>,
-  exception::AsyncThrow,
   await::DisableAwait,
+  exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -39,8 +39,8 @@ using Lazy = BasicTask<Promise<
 template<class T = void>
 using Task = BasicTask<Promise<
   value::BasicReturn<T>,
-  exception::AsyncThrow,
   await::EnableAwait<await::ThisCoroutine>,
+  exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -50,8 +50,8 @@ using Task = BasicTask<Promise<
 template<class T = void>
 using ImmediateTask = BasicTask<Promise<
   value::BasicReturn<T>,
-  exception::AsyncThrow,
   await::EnableAwait<await::ThisCoroutine>,
+  exception::AsyncThrow,
   suspend::BasicInitialSuspend<false>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -61,8 +61,8 @@ using ImmediateTask = BasicTask<Promise<
 template<class T>
 using Generator = BasicGenerator<Promise<
   value::BasicYield<T>,
-  exception::SyncThrow,
   await::DisableAwait,
+  exception::SyncThrow,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -72,8 +72,8 @@ using Generator = BasicGenerator<Promise<
 template<class T>
 using AsyncGenerator = BasicGenerator<Promise<
   value::BasicYield<T>,
-  exception::AsyncThrow,
   await::EnableAwait<await::ThisCoroutine>,
+  exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
 >>;
@@ -82,8 +82,8 @@ using AsyncGenerator = BasicGenerator<Promise<
 /// return a value.
 using FireAndForget = BasicCoroutine<Promise<
   value::BasicReturn<void>,
-  exception::SyncThrow,
   await::EnableAwait<await::ThisCoroutine>,
+  exception::SyncThrow,
   suspend::BasicInitialSuspend<false>,
   suspend::BasicFinalSuspend<false>
 >>;
