@@ -48,7 +48,7 @@ public:
   }
 
   // Move constructor equivalent for inner data.
-  template<typename U = T>
+  template<typename U>
   std::enable_if_t<std::is_constructible_v<T, U>>
   init_data(U &&data) noexcept(std::is_nothrow_constructible_v<T, U>) {
     free_data();
@@ -99,7 +99,7 @@ template<class R, size_t Align = 0>
 struct BasicReturn : detail::PromiseData<R, Align> {
   using value_type = R;
 
-  template<class T = R,
+  template<class T,
            class = std::enable_if_t<std::is_constructible_v<R, T>>>
   void return_value(T &&value) noexcept(std::is_nothrow_constructible_v<R, T>)
   {
@@ -127,34 +127,12 @@ struct BasicYield : detail::PromiseData<Y, Align> {
 
   void return_void() const noexcept {}
 
-  template<class T = Y,
+  template<class T,
            class = std::enable_if_t<std::is_constructible_v<Y, T>>>
   std::suspend_always
   yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
     this->init_data(std::forward<T>(value));
     return {};
-  }
-};
-
-/// Enables the `co_yield y;` statement where `y` is implicitly convertible to
-/// type `Y` and the `co_return;` statement. Resumes the awaiter asynchronously
-/// when finished.
-/// \param Y The coroutine's yield type (generator return type).
-/// \param Align The alignment of the promise return data. The default value 0
-///        uses the default alignment of `R`.
-template<class Y, size_t Align = 0>
-struct YieldWithContinuation : detail::PromiseData<Y, Align>,
-                               virtual detail::Continuation {
-  using value_type = Y;
-
-  void return_void() const noexcept {}
-
-  template<class T = Y,
-           class = std::enable_if_t<std::is_constructible_v<Y, T>>>
-  detail::SuspendWithContinuation
-  yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
-    this->init_data(std::forward<T>(value));
-    return this->suspend_with_continuation();
   }
 };
 
