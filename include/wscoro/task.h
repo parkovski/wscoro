@@ -81,6 +81,7 @@ struct BasicCoroutine
 
 public:
   using typename base::promise_type;
+  using outer_promise_type = P;
 
   using base::base;
 
@@ -130,6 +131,7 @@ struct BasicTask final
 
 public:
   using typename base::promise_type;
+  using outer_promise_type = P;
 
   // The type produced by awaiting this task.
   using value_type = typename promise_type::value_type;
@@ -193,6 +195,7 @@ struct BasicGenerator final
 
 public:
   using typename base::promise_type;
+  using outer_promise_type = P;
 
   using value_type = std::optional<typename promise_type::value_type>;
 
