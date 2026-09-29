@@ -87,12 +87,46 @@ public:
   BasicCoroutine(BasicCoroutine &&) = default;
 };
 
-template<class P>
+template<class T>
+struct BasicTaskAwaiter;
+
+template<class P, class<class> A = BasicTaskAwaiter>
+struct BasicTask;
+
+template<class T>
+struct BasicTaskAwaiter {
+protected:
+  const T &_task;
+
+public:
+  BasicTaskAwaiter(const T &task) noexcept
+    : _task{task}
+  {}
+
+  bool await_ready() const noexcept {
+    return _task.done();
+  }
+
+  bool await_suspend(std::coroutine_handle<typename T::promise_type>) const noexcept {
+    return false;
+  }
+
+  // If exception behavior is to save and rethrow (AsyncThrow) and one
+  // was thrown and not caught, it will be rethrown here. For non-void types,
+  // this returns the value from the inner coroutine's co_return.
+  typename T::value_type await_resume() const {
+    auto &promise = _task.promise();
+    promise.rethrow_exception();
+    return std::move(promise).data();
+  }
+};
+
+template<class P, class<class> A>
 struct BasicTask
-  : detail::CoroutineBase<typename P::template type<BasicTask<P>>>
+  : detail::CoroutineBase<typename P::template type<BasicTask<P, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicTask<P>>>;
+    detail::CoroutineBase<typename P::template type<BasicTask<P, A>>>;
 
 public:
   using typename base::promise_type;
@@ -110,30 +144,52 @@ public:
     }
   }
 
-  bool await_ready() const noexcept {
-    return this->done();
-  }
-
-  bool await_suspend(std::coroutine_handle<promise_type>) const noexcept {
-    return false;
-  }
-
-  // If exception behavior is to save and rethrow (AsyncThrow) and one
-  // was thrown and not caught, it will be rethrown here. For non-void types,
-  // this returns the value from the inner coroutine's co_return.
-  value_type await_resume() const {
-    auto &promise = this->promise();
-    promise.rethrow_exception();
-    return std::move(promise).data();
+  A<BasicTask> operator co_await() const noexcept(std::is_nothrow_constructible_v<A<BasicTask>, const BasicTask &>) {
+    return {*this};
   }
 };
 
-template<class P>
+template<class G>
+struct BasicGeneratorAwaiter;
+
+template<class P, class<class> A = BasicGeneratorAwaiter>
+struct BasicGenerator;
+
+template<class G>
+struct BasicGeneratorAwaiter {
+protected:
+  const G &_gen;
+
+public:
+  BasicTaskAwaiter(const G &gen) noexcept
+    : _gen{gen}
+  {}
+
+  bool await_ready() const noexcept {
+    return _gen.promise().has_value() || _gen.done();
+  }
+
+  bool await_suspend(std::coroutine_handle<typename G::promise_type>) const noexcept {
+    return false;
+  }
+
+  typename G::value_type await_resume() const {
+    auto &promise = _gen.promise();
+    promise.rethrow_exception();
+    if (_gen.done()) {
+      return std::nullopt;
+    }
+    assert(promise.has_value());
+    return {std::move(promise).data()};
+  }
+};
+
+template<class P, class<class> A>
 struct BasicGenerator
-  : detail::CoroutineBase<typename P::template type<BasicGenerator<P>>>
+  : detail::CoroutineBase<typename P::template type<BasicGenerator<P, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicGenerator<P>>>;
+    detail::CoroutineBase<typename P::template type<BasicGenerator<P, A>>>;
 
 public:
   using typename base::promise_type;
@@ -150,25 +206,8 @@ public:
     }
   }
 
-  bool await_ready() const noexcept {
-    return this->promise().has_value() || this->done();
-  }
-
-  bool await_suspend(std::coroutine_handle<promise_type>) const noexcept {
-    // Generators should always suspend initially since they can be awaited
-    // multiple times. Without an initial suspend, the behavior of the first
-    // await would differ from all the others.
-    return false;
-  }
-
-  value_type await_resume() const {
-    auto &promise = this->promise();
-    promise.rethrow_exception();
-    if (this->done()) {
-      return std::nullopt;
-    }
-    assert(promise.has_value());
-    return value_type{std::move(promise).data()};
+  A<BasicGenerator> operator co_await() const noexcept(std::is_nothrow_constructible_v<A<BasicGenerator>, const BasicGenerator &>) {
+    return {*this};
   }
 };
 
