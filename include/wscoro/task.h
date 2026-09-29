@@ -122,7 +122,7 @@ public:
 };
 
 template<class P, class<class> A>
-struct BasicTask
+struct Basic Task final
   : detail::CoroutineBase<typename P::template type<BasicTask<P, A>>>
 {
   using base =
@@ -185,7 +185,7 @@ public:
 };
 
 template<class P, class<class> A>
-struct BasicGenerator
+struct BasicGenerator final
   : detail::CoroutineBase<typename P::template type<BasicGenerator<P, A>>>
 {
   using base =
