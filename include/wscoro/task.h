@@ -93,13 +93,15 @@ public:
   BasicCoroutine(BasicCoroutine &&) = default;
 };
 
-template<class T>
+struct SyncScheduler;
+
+template<class T, class S>
 struct BasicTaskAwaiter;
 
-template<class P, class<class> A = BasicTaskAwaiter>
+template<class P, class S = SyncScheduler, class<class, class> A = BasicTaskAwaiter>
 struct BasicTask;
 
-template<class T>
+template<class T, class S>
 struct BasicTaskAwaiter {
 protected:
   T &_task;
@@ -114,11 +116,14 @@ public:
   }
 
   std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-    if (_task.promise().set_continuation(continuation)) {
-      return _task.handle();
+    if constexpr (std::is_base_of_v<detail::Continuation, typename T::promise_type>) {
+      _task.promise().set_continuation(continuation);
+      S{}(_task.handle());
+      return std::noop_coroutine();
+    } else {
+      _task.resume();
+      return continuation;
     }
-    _task.resume();
-    return continuation;
   }
 
   // If exception behavior is to save and rethrow (AsyncThrow) and one
@@ -131,12 +136,12 @@ public:
   }
 };
 
-template<class P, class<class> A>
+template<class P, class S, class<class, class> A>
 struct BasicTask final
-  : detail::CoroutineBase<typename P::template type<BasicTask<P, A>>>
+  : detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicTask<P, A>>>;
+    detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>;
 
 public:
   using typename base::promise_type;
@@ -155,18 +160,18 @@ public:
     }
   }
 
-  A<BasicTask> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicTask>, BasicTask &>) {
+  A<BasicTask, S> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicTask, S>, BasicTask &>) {
     return {*this};
   }
 };
 
-template<class G>
+template<class G, class S>
 struct BasicGeneratorAwaiter;
 
-template<class P, class<class> A = BasicGeneratorAwaiter>
+template<class P, class S = SyncScheduler, class<class, class> A = BasicGeneratorAwaiter>
 struct BasicGenerator;
 
-template<class G>
+template<class G, class S>
 struct BasicGeneratorAwaiter {
 protected:
   G &_gen;
@@ -181,11 +186,14 @@ public:
   }
 
   std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-    if (_task.promise().set_continuation(continuation)) {
-      return _task.handle();
+    if constexpr (std::is_base_of_v<detail::Continuation, typename G::promise_type>) {
+      _task.promise().set_continuation(continuation);
+      S{}(_task.handle());
+      return std::noop_coroutine();
+    } else {
+      _task.resume();
+      return continuation;
     }
-    _task.resume();
-    return continuation;
   }
 
   typename G::value_type await_resume() const {
@@ -199,12 +207,12 @@ public:
   }
 };
 
-template<class P, class<class> A>
+template<class P, class S, class<class, class> A>
 struct BasicGenerator final
-  : detail::CoroutineBase<typename P::template type<BasicGenerator<P, A>>>
+  : detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicGenerator<P, A>>>;
+    detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>;
 
 public:
   using typename base::promise_type;
@@ -222,7 +230,7 @@ public:
     }
   }
 
-  A<BasicGenerator> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicGenerator>, BasicGenerator &>) {
+  A<BasicGenerator, S> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicGenerator, S>, BasicGenerator &>) {
     return {*this};
   }
 };
