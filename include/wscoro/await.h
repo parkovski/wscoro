@@ -1,5 +1,7 @@
 #pragma once
 
+#include "promise.h"
+
 #include <coroutine>
 #include <type_traits>
 
@@ -11,7 +13,7 @@ struct ThisCoroutineAwaiter final {
   std::coroutine_handle<P> _coroutine;
 
   bool await_ready() const noexcept {
-    return false;
+    return !!_coroutine;
   }
 
   bool await_suspend(std::coroutine_handle<P> coroutine) noexcept {
@@ -35,7 +37,8 @@ namespace await {
 struct DisableAwait final {
   template<class>
   struct type {
-    void await_transform() = delete;
+    template<class T>
+    void await_transform(T &&) = delete;
   };
 };
 
@@ -63,7 +66,9 @@ struct EnableAwait final {
 template<template<class> class... Transforms>
 struct OnlyAwait final {
   template<class P>
-  struct type : Transforms<P>... {};
+  struct type : Transforms<P>... {
+    using Transforms<P>::await_transform...;
+  };
 };
 
 /// Enables the expression `co_await wscoro::this_coroutine` which returns a
@@ -72,7 +77,7 @@ template<class P>
 struct ThisCoroutine {
   detail::ThisCoroutineAwaiter<P>
   await_transform(const detail::ThisCoroutineTag &) const noexcept {
-    return {};
+    return {static_cast<P *>(this)->handle()};
   }
 };
 
