@@ -8,7 +8,7 @@ namespace detail {
 
 template<class P>
 struct ThisCoroutineAwaiter final {
-  std::coroutine_handle<P> _coroutine;
+  std::coroutine_handle<P> _coroutine = nullptr;
 
   bool await_ready() const noexcept {
     return !!_coroutine;
