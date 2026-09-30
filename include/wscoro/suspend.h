@@ -95,7 +95,7 @@ struct BasicFinalSuspend : NoContinuation {
 };
 
 struct FinalSuspendWithContinuation 
-  : virtual detail::Continuation {
+  : detail::Continuation {
   detail::Resumer final_suspend() const noexcept {
     return {this->_continuation};
   }
