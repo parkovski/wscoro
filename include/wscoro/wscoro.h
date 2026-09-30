@@ -74,8 +74,7 @@ using AsyncGenerator = BasicGenerator<Promise<
   value::YieldWithContinuation<T>,
   await::EnableAwait<await::ThisCoroutine>,
   exception::AsyncThrow,
-  suspend::BasicInitialSuspend<true>,
-  suspend::FinalSuspendWithContinuation
+  suspend::BasicInitialSuspend<true>
 >>;
 
 /// Non-awaitable task. Can await other tasks but can't be awaited itself or
