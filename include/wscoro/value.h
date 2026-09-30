@@ -142,5 +142,22 @@ struct BasicYield : detail::PromiseData<Y, Align> {
   }
 };
 
+template<class Y, size_t Align = 0>
+struct YieldWithContinuation
+  : detail::PromiseData<Y, Align>
+  , virtual detail::Continuation {
+  using value_type = Y;
+
+  void return_void() const noexcept {}
+
+  template<class T,
+           class = std::enable_if_t<std::is_constructible_v<Y, T>>>
+  detail::Resumer
+  yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
+    this->init_data(std::forward<T>(value));
+    return {this->_continuation};
+  }
+};
+
 } // namespace value
 } // namespace wscoro
