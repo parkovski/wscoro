@@ -77,7 +77,7 @@ template<class P>
 struct ThisCoroutine {
   detail::ThisCoroutineAwaiter<P>
   await_transform(const detail::ThisCoroutineTag &) const noexcept {
-    return {static_cast<P *>(this)->handle()};
+    return {};
   }
 };
 
