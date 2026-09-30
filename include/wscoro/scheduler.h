@@ -4,14 +4,9 @@
 
 namespace wscoro {
 
-template<class T>
 struct SyncScheduler {
-  T &_task;
-
-  std::coroutine_handle<>
-  operator()(std::coroutine_handle<> continuation) const {
-    _task.resume();
-    return continuation;
+  void operator()(std::coroutine_handle<> coroutine) const {
+    coroutine.resume();
   }
 };
 
