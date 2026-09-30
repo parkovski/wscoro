@@ -42,7 +42,7 @@ using Task = BasicTask<Promise<
   await::EnableAwait<await::ThisCoroutine>,
   exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
-  suspend::BasicFinalSuspend<true>
+  suspend::FinalSuspendWithContinuation
 >>;
 
 /// Task that begins execution when created.
@@ -53,7 +53,7 @@ using ImmediateTask = BasicTask<Promise<
   await::EnableAwait<await::ThisCoroutine>,
   exception::AsyncThrow,
   suspend::BasicInitialSuspend<false>,
-  suspend::BasicFinalSuspend<true>
+  suspend::FinalSuspendWithContinuation
 >>;
 
 /// Synchronous generator.
@@ -71,11 +71,11 @@ using Generator = BasicGenerator<Promise<
 /// \param T The generator's yield type.
 template<class T>
 using AsyncGenerator = BasicGenerator<Promise<
-  value::BasicYield<T>,
+  value::YieldWithContinuation<T>,
   await::EnableAwait<await::ThisCoroutine>,
   exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
-  suspend::BasicFinalSuspend<true>
+  suspend::FinalSuspendWithContinuation
 >>;
 
 /// Non-awaitable task. Can await other tasks but can't be awaited itself or
