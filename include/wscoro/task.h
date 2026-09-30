@@ -41,6 +41,11 @@ public:
     swap(a._handle, b._handle);
   }
 
+  std::coroutine_handle<promise_type>
+  handle() const noexcept {
+    return _handle;
+  }
+
   promise_type &promise() const noexcept {
     return _handle.promise();
   }
@@ -97,10 +102,10 @@ struct BasicTask;
 template<class T>
 struct BasicTaskAwaiter {
 protected:
-  const T &_task;
+  T &_task;
 
 public:
-  BasicTaskAwaiter(const T &task) noexcept
+  BasicTaskAwaiter(T &task) noexcept
     : _task{task}
   {}
 
@@ -108,8 +113,12 @@ public:
     return _task.done();
   }
 
-  bool await_suspend(std::coroutine_handle<typename T::promise_type>) const noexcept {
-    return false;
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
+    if (_task.promise().set_continuation(continuation)) {
+      return _task.handle();
+    }
+    _task.resume();
+    return continuation;
   }
 
   // If exception behavior is to save and rethrow (AsyncThrow) and one
@@ -146,7 +155,7 @@ public:
     }
   }
 
-  A<BasicTask> operator co_await() const noexcept(std::is_nothrow_constructible_v<A<BasicTask>, const BasicTask &>) {
+  A<BasicTask> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicTask>, BasicTask &>) {
     return {*this};
   }
 };
@@ -160,10 +169,10 @@ struct BasicGenerator;
 template<class G>
 struct BasicGeneratorAwaiter {
 protected:
-  const G &_gen;
+  G &_gen;
 
 public:
-  BasicGeneratorAwaiter(const G &gen) noexcept
+  BasicGeneratorAwaiter(G &gen) noexcept
     : _gen{gen}
   {}
 
@@ -171,8 +180,12 @@ public:
     return _gen.promise().has_value() || _gen.done();
   }
 
-  bool await_suspend(std::coroutine_handle<typename G::promise_type>) const noexcept {
-    return false;
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
+    if (_task.promise().set_continuation(continuation)) {
+      return _task.handle();
+    }
+    _task.resume();
+    return continuation;
   }
 
   typename G::value_type await_resume() const {
@@ -209,7 +222,7 @@ public:
     }
   }
 
-  A<BasicGenerator> operator co_await() const noexcept(std::is_nothrow_constructible_v<A<BasicGenerator>, const BasicGenerator &>) {
+  A<BasicGenerator> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicGenerator>, BasicGenerator &>) {
     return {*this};
   }
 };
