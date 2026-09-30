@@ -14,6 +14,48 @@ template<bool Suspend>
 using BasicSuspend =
   std::conditional_t<Suspend, std::suspend_always, std::suspend_never>;
 
+struct Continuation {
+protected:
+  std::coroutine_handle<> _continuation = nullptr;
+
+public:
+  bool set_continuation(std::coroutine_handle<> continuation) noexcept {
+    _continuation = continuation;
+    return true;
+  }
+
+  std::coroutine_handle<> continuation() const noexcept {
+    return _continuation;
+  }
+};
+
+struct NoContinuation {
+  bool set_continuation(std::coroutine_handle<>) noexcept {
+    return false;
+  }
+
+  std::coroutine_handle<> continuation() const noexcept {
+    return nullptr;
+  }
+};
+
+struct Resumer {
+  std::coroutine_handle<> _coroutine;
+
+  bool await_ready() const noexcept {
+    return false;
+  }
+
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) const noexcept {
+    if (_coroutine) {
+      return _coroutine;
+    }
+    return std::noop_coroutine();
+  }
+
+  void await_resume() const noexcept {}
+};
+
 } // namespace detail
 
 namespace suspend {
@@ -32,6 +74,10 @@ struct BasicInitialSuspend {
   constexpr detail::BasicSuspend<Suspend> initial_suspend() const noexcept {
     return {};
   }
+
+  constexpr bool did_initial_suspend() const noexcept {
+    return Suspend;
+  }
 };
 
 /// Provides a `final_suspend` that either always or never suspends.
@@ -42,9 +88,16 @@ struct BasicInitialSuspend {
 ///
 /// \param Suspend Determines whether the coroutine suspends on completion.
 template<bool Suspend>
-struct BasicFinalSuspend {
+struct BasicFinalSuspend : NoContinuation {
   constexpr detail::BasicSuspend<Suspend> final_suspend() const noexcept {
     return {};
+  }
+};
+
+struct FinalSuspendWithContinuation 
+  : virtual detail::Continuation {
+  detail::Resumer final_suspend() const noexcept {
+    return {this->_continuation};
   }
 };
 
