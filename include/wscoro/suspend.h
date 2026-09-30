@@ -19,23 +19,12 @@ protected:
   std::coroutine_handle<> _continuation = nullptr;
 
 public:
-  bool set_continuation(std::coroutine_handle<> continuation) noexcept {
+  void set_continuation(std::coroutine_handle<> continuation) noexcept {
     _continuation = continuation;
-    return true;
   }
 
   std::coroutine_handle<> continuation() const noexcept {
     return _continuation;
-  }
-};
-
-struct NoContinuation {
-  bool set_continuation(std::coroutine_handle<>) noexcept {
-    return false;
-  }
-
-  std::coroutine_handle<> continuation() const noexcept {
-    return nullptr;
   }
 };
 
@@ -88,7 +77,7 @@ struct BasicInitialSuspend {
 ///
 /// \param Suspend Determines whether the coroutine suspends on completion.
 template<bool Suspend>
-struct BasicFinalSuspend : NoContinuation {
+struct BasicFinalSuspend {
   constexpr detail::BasicSuspend<Suspend> final_suspend() const noexcept {
     return {};
   }
