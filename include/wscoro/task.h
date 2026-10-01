@@ -93,15 +93,16 @@ public:
   BasicCoroutine(BasicCoroutine &&) = default;
 };
 
+template<class T>
 struct SyncScheduler;
 
-template<class T, class S>
+template<class T, class<class> S>
 struct BasicTaskAwaiter;
 
-template<class P, class S = SyncScheduler, class<class, class> A = BasicTaskAwaiter>
+template<class P, class<class> S = SyncScheduler, class<class, class<class>> A = BasicTaskAwaiter>
 struct BasicTask;
 
-template<class T, class S>
+template<class T, class<class> S>
 struct BasicTaskAwaiter {
 protected:
   T &_task;
@@ -116,14 +117,7 @@ public:
   }
 
   std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-    if constexpr (std::is_base_of_v<detail::Continuation, typename T::promise_type>) {
-      _task.promise().set_continuation(continuation);
-      S{}(_task.handle());
-      return std::noop_coroutine();
-    } else {
-      _task.resume();
-      return continuation;
-    }
+    return S<T>{_task}(continuation);
   }
 
   // If exception behavior is to save and rethrow (AsyncThrow) and one
@@ -136,7 +130,7 @@ public:
   }
 };
 
-template<class P, class S, class<class, class> A>
+template<class P, class<class> S, class<class, class<class>> A>
 struct BasicTask final
   : detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>
 {
@@ -165,13 +159,13 @@ public:
   }
 };
 
-template<class G, class S>
+template<class G, class<class> S>
 struct BasicGeneratorAwaiter;
 
-template<class P, class S = SyncScheduler, class<class, class> A = BasicGeneratorAwaiter>
+template<class P, class<class> S = SyncScheduler, class<class, class<class>> A = BasicGeneratorAwaiter>
 struct BasicGenerator;
 
-template<class G, class S>
+template<class G, class<class> S>
 struct BasicGeneratorAwaiter {
 protected:
   G &_gen;
@@ -186,14 +180,7 @@ public:
   }
 
   std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
-    if constexpr (std::is_base_of_v<detail::Continuation, typename G::promise_type>) {
-      _task.promise().set_continuation(continuation);
-      S{}(_task.handle());
-      return std::noop_coroutine();
-    } else {
-      _task.resume();
-      return continuation;
-    }
+    return S<G>{_gen}(continuation);
   }
 
   typename G::value_type await_resume() const {
@@ -207,7 +194,7 @@ public:
   }
 };
 
-template<class P, class S, class<class, class> A>
+template<class P, class<class> S, class<class, class<class>> A>
 struct BasicGenerator final
   : detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>
 {
