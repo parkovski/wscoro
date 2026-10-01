@@ -38,7 +38,7 @@ using Lazy = BasicTask<Promise<
 /// handle to asynchronously resume the awaiter.
 /// \param T The coroutine's return type.
 /// \param S The scheduler.
-template<class T = void, class S = SyncScheduler>
+template<class T = void, class<class> S = SyncScheduler>
 using Task = BasicTask<Promise<
   value::BasicReturn<T>,
   await::EnableAwait<await::ThisCoroutine>,
@@ -50,7 +50,7 @@ using Task = BasicTask<Promise<
 /// Task that begins execution when created.
 /// \param T The coroutine's return type.
 /// \param S The scheduler.
-template<class T = void, class S = SyncScheduler>
+template<class T = void, class<class> S = SyncScheduler>
 using ImmediateTask = BasicTask<Promise<
   value::BasicReturn<T>,
   await::EnableAwait<await::ThisCoroutine>,
@@ -73,7 +73,7 @@ using Generator = BasicGenerator<Promise<
 /// Asynchronous generator.
 /// \param T The generator's yield type.
 /// \param S The scheduler.
-template<class T, class S = SyncScheduler>
+template<class T, class<class> S = SyncScheduler>
 using AsyncGenerator = BasicGenerator<Promise<
   value::YieldWithContinuation<T>,
   await::EnableAwait<await::ThisCoroutine>,
