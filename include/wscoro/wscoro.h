@@ -25,14 +25,14 @@ using Immediate = BasicTask<Promise<
 /// A synchronously executing coroutine that waits to begin execution until it
 /// is awaited. It cannot await other coroutines.
 /// \param T The coroutine's return type.
-template<class T = void>
+template<class T = void, class<class> S = SyncScheduler>
 using Lazy = BasicTask<Promise<
   value::BasicReturn<T>,
   await::DisableAwait,
   exception::AsyncThrow,
   suspend::BasicInitialSuspend<true>,
   suspend::BasicFinalSuspend<true>
->>;
+>, S>;
 
 /// Standard task type. Begins execution when awaited. Holds a continuation
 /// handle to asynchronously resume the awaiter.
@@ -50,14 +50,14 @@ using Task = BasicTask<Promise<
 /// Task that begins execution when created.
 /// \param T The coroutine's return type.
 /// \param S The scheduler.
-template<class T = void, class<class> S = SyncScheduler>
+template<class T = void>
 using ImmediateTask = BasicTask<Promise<
   value::BasicReturn<T>,
   await::EnableAwait<await::ThisCoroutine>,
   exception::AsyncThrow,
   suspend::BasicInitialSuspend<false>,
   suspend::FinalSuspendWithContinuation
->, S>;
+>>;
 
 /// Synchronous generator.
 /// \param T The generator's yield type.
