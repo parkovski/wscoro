@@ -96,13 +96,13 @@ public:
 template<class T>
 struct SyncScheduler;
 
-template<class T, class<class> S>
+template<class T, template<class> S>
 struct BasicTaskAwaiter;
 
-template<class P, class<class> S = SyncScheduler, class<class, class<class>> A = BasicTaskAwaiter>
+template<class P, template<class> S = SyncScheduler, template<class, template<class>> A = BasicTaskAwaiter>
 struct BasicTask;
 
-template<class T, class<class> S>
+template<class T, template<class> S>
 struct BasicTaskAwaiter {
 protected:
   T &_task;
@@ -130,7 +130,7 @@ public:
   }
 };
 
-template<class P, class<class> S, class<class, class<class>> A>
+template<class P, template<class> S, template<class, template<class>> A>
 struct BasicTask final
   : detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>
 {
@@ -159,13 +159,13 @@ public:
   }
 };
 
-template<class G, class<class> S>
+template<class G, template<class> S>
 struct BasicGeneratorAwaiter;
 
-template<class P, class<class> S = SyncScheduler, class<class, class<class>> A = BasicGeneratorAwaiter>
+template<class P, template<class> S = SyncScheduler, template<class, template<class>> A = BasicGeneratorAwaiter>
 struct BasicGenerator;
 
-template<class G, class<class> S>
+template<class G, template<class> S>
 struct BasicGeneratorAwaiter {
 protected:
   G &_gen;
@@ -194,7 +194,7 @@ public:
   }
 };
 
-template<class P, class<class> S, class<class, class<class>> A>
+template<class P, template<class> S, template<class, template<class>> A>
 struct BasicGenerator final
   : detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>
 {
