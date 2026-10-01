@@ -63,10 +63,6 @@ struct BasicInitialSuspend {
   constexpr detail::BasicSuspend<Suspend> initial_suspend() const noexcept {
     return {};
   }
-
-  constexpr bool did_initial_suspend() const noexcept {
-    return Suspend;
-  }
 };
 
 /// Provides a `final_suspend` that either always or never suspends.
