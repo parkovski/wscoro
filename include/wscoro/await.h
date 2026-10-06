@@ -74,8 +74,8 @@ struct OnlyAwait final {
 template<class P>
 struct ThisCoroutine {
   detail::ThisCoroutineAwaiter<P>
-  await_transform(const detail::ThisCoroutineTag &) const noexcept {
-    return {};
+  await_transform(const detail::ThisCoroutineTag &) noexcept {
+    return {std::coroutine_handle<P>::from_promise(*static_cast<P *>(this))};
   }
 };
 
