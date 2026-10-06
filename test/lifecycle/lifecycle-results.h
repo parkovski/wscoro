@@ -25,11 +25,11 @@ LCRESULT(Immediate) =
 LCRESULT(Lazy) =
 #include "lc-lazy.txt"
 
-LCRESULT(DelayTask) =
+LCRESULT(Task) =
 #include "lc-task.txt"
 
-LCRESULT(Task) =
-#include "lc-autotask.txt"
+LCRESULT(ImmediateTask) =
+#include "lc-immediatetask.txt"
 
 LCRESULT(Generator) =
 #include "lc-generator.txt"
