@@ -62,6 +62,8 @@ struct SyncScheduler {
 
 /// Runs a task in a new thread, switching back to the original thread when the
 /// task completes.
+/// Warning: If this is used with a generator, it will start a new thread each
+/// time it is awaited.
 template<class T>
 struct RunInNewThread {
   T &_task;
@@ -128,6 +130,8 @@ struct RunInNewThread {
 };
 
 /// Switches to a new thread for the duration of the entire coroutine chain.
+/// Warning: If this is used with a generator, it will start a new thread each
+/// time it is awaited.
 template<class T>
 struct SwitchToNewThread {
   T &_task;
