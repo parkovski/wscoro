@@ -35,7 +35,8 @@ struct Resumer {
     return false;
   }
 
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) const noexcept {
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<>) const noexcept {
     if (_coroutine) {
       return _coroutine;
     }
@@ -62,6 +63,10 @@ template<bool Suspend>
 struct BasicInitialSuspend {
   constexpr detail::BasicSuspend<Suspend> initial_suspend() const noexcept {
     return {};
+  }
+
+  constexpr bool did_initial_suspend() const noexcept {
+    return Suspend;
   }
 };
 

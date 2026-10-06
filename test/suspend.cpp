@@ -3,6 +3,7 @@
 #include <catch2/catch_all.hpp>
 
 #include <sstream>
+#include <utility>
 
 using namespace wscoro;
 
@@ -14,11 +15,11 @@ TaskB suspend_b(std::stringstream &s) {
 }
 
 template<typename TaskA, typename TaskB>
-TaskA suspend_a(std::stringstream &s, TaskB &b) {
+TaskA suspend_a(std::stringstream &s, TaskB *b) {
   s << "A0";
-  b = suspend_b<TaskB>(s);
+  new (b) TaskB{suspend_b<TaskB>(s)};
   s << ", A1]";
-  co_await b;
+  co_await *b;
   s << ", [A2";
 }
 
@@ -56,7 +57,7 @@ void test_suspend(int steps_a, int steps_b, const char *expected) {
   // Extend the lifetime of this task so we can verify when it finishes.
   TaskB b{nullptr};
   s << "A: [";
-  auto a = suspend_a<TaskA, TaskB>(s, b);
+  auto a = suspend_a<TaskA, TaskB>(s, &b);
   test_suspend_step(a, steps_a, b, steps_b, s);
   REQUIRE(s.str() == expected);
 }

@@ -42,13 +42,14 @@ TEMPLATE_TEST_CASE("co_return", "[basic][task]",
                    (Immediate<int>), (Lazy<int>), (Task<int>),
                    (ImmediateTask<int>)) {
   auto t = add_one<TestType>(1);
+  auto awaiter = t.operator co_await();
   if constexpr (std::is_base_of_v<wscoro::suspend::BasicInitialSuspend<true>,
                                   typename TestType::promise_type>) {
-    REQUIRE(!t.await_ready());
-    t.await_suspend(std::noop_coroutine()).resume();
+    REQUIRE(!awaiter.await_ready());
+    awaiter.await_suspend(std::noop_coroutine()).resume();
   }
-  REQUIRE(t.await_ready());
-  REQUIRE(t.await_resume() == 2);
+  REQUIRE(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == 2);
 }
 
 template<class G>
@@ -60,16 +61,17 @@ G inc_twice(int x) {
 TEMPLATE_TEST_CASE("co_yield", "[basic][generator]",
                    (Generator<int>), (AsyncGenerator<int>)) {
   auto t = inc_twice<TestType>(1);
-  REQUIRE(!t.await_ready());
+  auto awaiter = t.operator co_await();
+  REQUIRE(!awaiter.await_ready());
   t.resume();
-  REQUIRE(t.await_ready());
-  REQUIRE(*t.await_resume() == 2);
+  REQUIRE(awaiter.await_ready());
+  REQUIRE(*awaiter.await_resume() == 2);
   t.resume();
-  REQUIRE(t.await_ready());
-  REQUIRE(*t.await_resume() == 3);
+  REQUIRE(awaiter.await_ready());
+  REQUIRE(*awaiter.await_resume() == 3);
   t.resume();
-  REQUIRE(t.await_ready());
-  REQUIRE(t.await_resume() == std::nullopt);
+  REQUIRE(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == std::nullopt);
 }
 
 FireAndForget inc_ref(int &x) {
@@ -119,7 +121,7 @@ TEST_CASE("Basic Task suspension", "[basic][task]") {
   REQUIRE(get_one.done());
   REQUIRE(counter == 3);
 
-  REQUIRE(get_one.await_resume() == 1);
+  REQUIRE(get_one.operator co_await().await_resume() == 1);
 }
 
 TEST_CASE("Basic ImmediateTask suspension", "[basic][task]") {
@@ -131,7 +133,7 @@ TEST_CASE("Basic ImmediateTask suspension", "[basic][task]") {
   REQUIRE(get_one.done());
   REQUIRE(counter == 3);
 
-  REQUIRE(get_one.await_resume() == 1);
+  REQUIRE(get_one.operator co_await().await_resume() == 1);
 }
 
 Task<std::coroutine_handle<>> get_this_coroutine() {

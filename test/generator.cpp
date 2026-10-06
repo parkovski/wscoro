@@ -38,19 +38,22 @@ static ImmediateTask<std::string> get_seq(G generator, int rounds) {
 
 TEST_CASE("Fibonacci generator (not called)", "[basicseq][generator]") {
   auto fib_seq = get_seq(fibonacci(), 0);
-  CHECK(fib_seq.await_ready()); REQUIRE(fib_seq.await_resume() == "");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready()); REQUIRE(awaiter.await_resume() == "");
 }
 
 TEST_CASE("Fibonacci generator (called once)", "[basicseq][generator]") {
   auto fib_seq = get_seq(fibonacci(), 1);
-  CHECK(fib_seq.await_ready());
-  REQUIRE(fib_seq.await_resume() == "1");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == "1");
 }
 
 TEST_CASE("Fibonacci generator", "[basicseq][generator]") {
   auto fib_seq = get_seq(fibonacci(), 7);
-  CHECK(fib_seq.await_ready());
-  REQUIRE(fib_seq.await_resume() == "1 1 2 3 5 8 13");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == "1 1 2 3 5 8 13");
 }
 
 TEST_CASE("Fibonacci without co_await", "[basicseq][generator]") {
@@ -60,24 +63,27 @@ TEST_CASE("Fibonacci without co_await", "[basicseq][generator]") {
   for (int i = 0; i < sizeof(seq)/sizeof(seq[0]); ++i) {
     fib.resume();
     CHECK(!fib.done());
-    REQUIRE(fib.await_resume() == seq[i]);
+    REQUIRE(fib.operator co_await().await_resume() == seq[i]);
   }
 }
 
 TEST_CASE("Async generator (not called)", "[basicseq][asyncgenerator]") {
   auto fib_seq = get_seq(async_fib(), 0);
-  CHECK(fib_seq.await_ready());
-  REQUIRE(fib_seq.await_resume() == "");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == "");
 }
 
 TEST_CASE("Async generator (called once)", "[basicseq][asyncgenerator]") {
   auto fib_seq = get_seq(async_fib(), 1);
-  CHECK(fib_seq.await_ready());
-  REQUIRE(fib_seq.await_resume() == "1");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == "1");
 }
 
 TEST_CASE("Async generator", "[basicseq][asyncgenerator]") {
   auto fib_seq = get_seq(async_fib(), 7);
-  CHECK(fib_seq.await_ready());
-  REQUIRE(fib_seq.await_resume() == "1 1 2 3 5 8 13");
+  auto awaiter = fib_seq.operator co_await();
+  CHECK(awaiter.await_ready());
+  REQUIRE(awaiter.await_resume() == "1 1 2 3 5 8 13");
 }

@@ -96,13 +96,17 @@ public:
 template<class T>
 struct SyncScheduler;
 
-template<class T, template<class> S>
+template<class T, template<class> class S>
 struct BasicTaskAwaiter;
 
-template<class P, template<class> S = SyncScheduler, template<class, template<class>> A = BasicTaskAwaiter>
+template<
+  class P,
+  template<class> class S = SyncScheduler,
+  template<class, template<class> class> class A = BasicTaskAwaiter
+>
 struct BasicTask;
 
-template<class T, template<class> S>
+template<class T, template<class> class S>
 struct BasicTaskAwaiter {
 protected:
   T &_task;
@@ -116,7 +120,8 @@ public:
     return _task.done();
   }
 
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<> continuation) const noexcept {
     return S<T>{_task}(continuation);
   }
 
@@ -130,7 +135,11 @@ public:
   }
 };
 
-template<class P, template<class> S, template<class, template<class>> A>
+template<
+  class P,
+  template<class> class S,
+  template<class, template<class> class> class A
+>
 struct BasicTask final
   : detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>
 {
@@ -154,18 +163,25 @@ public:
     }
   }
 
-  A<BasicTask, S> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicTask, S>, BasicTask &>) {
+  A<BasicTask, S> operator co_await()
+    noexcept(
+      std::is_nothrow_constructible_v<A<BasicTask, S>, BasicTask &>
+    ) {
     return {*this};
   }
 };
 
-template<class G, template<class> S>
+template<class G, template<class> class S>
 struct BasicGeneratorAwaiter;
 
-template<class P, template<class> S = SyncScheduler, template<class, template<class>> A = BasicGeneratorAwaiter>
+template<
+  class P,
+  template<class> class S = SyncScheduler,
+  template<class, template<class> class> class A = BasicGeneratorAwaiter
+>
 struct BasicGenerator;
 
-template<class G, template<class> S>
+template<class G, template<class> class S>
 struct BasicGeneratorAwaiter {
 protected:
   G &_gen;
@@ -179,7 +195,8 @@ public:
     return _gen.promise().has_value() || _gen.done();
   }
 
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<> continuation) const noexcept {
+  std::coroutine_handle<>
+  await_suspend(std::coroutine_handle<> continuation) const noexcept {
     return S<G>{_gen}(continuation);
   }
 
@@ -194,7 +211,11 @@ public:
   }
 };
 
-template<class P, template<class> S, template<class, template<class>> A>
+template<
+  class P,
+  template<class> class S,
+  template<class, template<class> class> class A
+>
 struct BasicGenerator final
   : detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>
 {
@@ -217,7 +238,10 @@ public:
     }
   }
 
-  A<BasicGenerator, S> operator co_await() noexcept(std::is_nothrow_constructible_v<A<BasicGenerator, S>, BasicGenerator &>) {
+  A<BasicGenerator, S> operator co_await()
+    noexcept(
+      std::is_nothrow_constructible_v<A<BasicGenerator, S>, BasicGenerator &>
+    ) {
     return {*this};
   }
 };
