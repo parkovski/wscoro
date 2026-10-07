@@ -13,7 +13,7 @@ namespace detail {
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
 template<typename T, size_t Align = 0>
-struct alignas(Align) PromiseData {
+struct alignas(Align) promise_data {
 private:
   union {
     T _data;
@@ -30,16 +30,16 @@ protected:
   }
 
 public:
-  PromiseData() noexcept {
+  promise_data() noexcept {
     _is_empty.test_and_set(std::memory_order_release);
   }
 
-  PromiseData(PromiseData &&) = delete;
-  PromiseData(const PromiseData &) = delete;
-  PromiseData &operator=(PromiseData &&) = delete;
-  PromiseData &operator=(const PromiseData &) = delete;
+  promise_data(promise_data &&) = delete;
+  promise_data(const promise_data &) = delete;
+  promise_data &operator=(promise_data &&) = delete;
+  promise_data &operator=(const promise_data &) = delete;
 
-  ~PromiseData() {
+  ~promise_data() {
     free_data();
   }
 
@@ -84,7 +84,7 @@ public:
 };
 
 template<>
-struct PromiseData<void, 0> {
+struct promise_data<void, 0> {
   bool has_value() const noexcept {
     return false;
   }
@@ -102,7 +102,7 @@ namespace value {
 /// \param Align The alignment of the promise return data. The default value 0
 ///        uses the default alignment of `R`.
 template<class R, size_t Align = 0>
-struct BasicReturn : detail::PromiseData<R, Align> {
+struct basic_return : detail::promise_data<R, Align> {
   using value_type = R;
 
   template<class T,
@@ -116,7 +116,7 @@ struct BasicReturn : detail::PromiseData<R, Align> {
 /// Enables the `co_return;` statement. No return value storage is allocated
 /// for the coroutine.
 template<>
-struct BasicReturn<void, 0> : detail::PromiseData<void> {
+struct basic_return<void, 0> : detail::promise_data<void> {
   using value_type = void;
 
   constexpr void return_void() const noexcept {}
@@ -128,7 +128,7 @@ struct BasicReturn<void, 0> : detail::PromiseData<void> {
 /// \param Align The alignment of the promise return data. The default value 0
 ///        uses the default alignment of `R`.
 template<class Y, size_t Align = 0>
-struct BasicYield : detail::PromiseData<Y, Align> {
+struct basic_yield : detail::promise_data<Y, Align> {
   using value_type = Y;
 
   void return_void() const noexcept {}
@@ -143,22 +143,22 @@ struct BasicYield : detail::PromiseData<Y, Align> {
 };
 
 template<class Y, size_t Align = 0>
-struct YieldWithContinuation
-  : detail::PromiseData<Y, Align>
-  , detail::Continuation {
+struct yield_with_continuation
+  : detail::promise_data<Y, Align>
+  , detail::with_continuation {
   using value_type = Y;
 
   void return_void() const noexcept {}
 
   template<class T,
            class = std::enable_if_t<std::is_constructible_v<Y, T>>>
-  detail::Resumer
+  detail::resumer
   yield_value(T &&value) noexcept(std::is_nothrow_constructible_v<Y, T>) {
     this->init_data(std::forward<T>(value));
     return {this->_continuation};
   }
 
-  detail::Resumer final_suspend() const noexcept {
+  detail::resumer final_suspend() const noexcept {
     return {this->_continuation};
   }
 };

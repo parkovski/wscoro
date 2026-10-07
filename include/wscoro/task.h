@@ -13,9 +13,9 @@ namespace detail {
 /// Coroutine base type.
 /// \param P The promise type.
 template<class P>
-struct CoroutineBase {
+struct coroutine_base {
 public:
-  friend struct std::hash<CoroutineBase>;
+  friend struct std::hash<coroutine_base>;
 
   using promise_type = P;
 
@@ -23,20 +23,20 @@ protected:
   std::coroutine_handle<promise_type> _handle;
 
 public:
-  explicit CoroutineBase(std::coroutine_handle<promise_type> handle) noexcept
+  explicit coroutine_base(std::coroutine_handle<promise_type> handle) noexcept
     : _handle{handle}
   {}
 
-  CoroutineBase(const CoroutineBase &) = delete;
-  CoroutineBase &operator=(const CoroutineBase &) = delete;
+  coroutine_base(const coroutine_base &) = delete;
+  coroutine_base &operator=(const coroutine_base &) = delete;
 
-  CoroutineBase(CoroutineBase &&o) noexcept : _handle{o._handle} {
+  coroutine_base(coroutine_base &&o) noexcept : _handle{o._handle} {
     o._handle = nullptr;
   }
 
-  CoroutineBase &operator=(CoroutineBase &&o) = delete;
+  coroutine_base &operator=(coroutine_base &&o) = delete;
 
-  friend void swap(CoroutineBase &a, CoroutineBase &b) noexcept {
+  friend void swap(coroutine_base &a, coroutine_base &b) noexcept {
     using std::swap;
     swap(a._handle, b._handle);
   }
@@ -78,11 +78,11 @@ public:
 /// finishes - the coroutine is entirely on its own.
 /// \param P The coroutine's promise type.
 template<class P>
-struct BasicCoroutine
-  : detail::CoroutineBase<typename P::template type<BasicCoroutine<P>>>
+struct basic_coroutine
+  : detail::coroutine_base<typename P::template type<basic_coroutine<P>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicCoroutine<P>>>;
+    detail::coroutine_base<typename P::template type<basic_coroutine<P>>>;
 
 public:
   using typename base::promise_type;
@@ -91,29 +91,29 @@ public:
 
   using base::base;
 
-  BasicCoroutine(BasicCoroutine &&) = default;
+  basic_coroutine(basic_coroutine &&) = default;
 };
 
 template<class T>
-struct SyncScheduler;
+struct sync_scheduler;
 
 template<class T, template<class> class S>
-struct BasicTaskAwaiter;
+struct basic_task_awaiter;
 
 template<
   class P,
-  template<class> class S = SyncScheduler,
-  template<class, template<class> class> class A = BasicTaskAwaiter
+  template<class> class S = sync_scheduler,
+  template<class, template<class> class> class A = basic_task_awaiter
 >
-struct BasicTask;
+struct basic_task;
 
 template<class T, template<class> class S>
-struct BasicTaskAwaiter {
+struct basic_task_awaiter {
 protected:
   T &_task;
 
 public:
-  BasicTaskAwaiter(T &task) noexcept
+  basic_task_awaiter(T &task) noexcept
     : _task{task}
   {}
 
@@ -141,11 +141,11 @@ template<
   template<class> class S,
   template<class, template<class> class> class A
 >
-struct BasicTask final
-  : detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>
+struct basic_task final
+  : detail::coroutine_base<typename P::template type<basic_task<P, S, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicTask<P, S, A>>>;
+    detail::coroutine_base<typename P::template type<basic_task<P, S, A>>>;
 
 public:
   using typename base::promise_type;
@@ -156,39 +156,39 @@ public:
 
   using base::base;
 
-  BasicTask(BasicTask &&) = default;
+  basic_task(basic_task &&) = default;
 
-  ~BasicTask() {
+  ~basic_task() {
     if (this->_handle) {
       this->_handle.destroy();
     }
   }
 
-  A<BasicTask, S> operator co_await()
+  A<basic_task, S> operator co_await()
     noexcept(
-      std::is_nothrow_constructible_v<A<BasicTask, S>, BasicTask &>
+      std::is_nothrow_constructible_v<A<basic_task, S>, basic_task &>
     ) {
     return {*this};
   }
 };
 
 template<class G, template<class> class S>
-struct BasicGeneratorAwaiter;
+struct basic_generator_awaiter;
 
 template<
   class P,
-  template<class> class S = SyncScheduler,
-  template<class, template<class> class> class A = BasicGeneratorAwaiter
+  template<class> class S = sync_scheduler,
+  template<class, template<class> class> class A = basic_generator_awaiter
 >
-struct BasicGenerator;
+struct basic_generator;
 
 template<class G, template<class> class S>
-struct BasicGeneratorAwaiter {
+struct basic_generator_awaiter {
 protected:
   G &_gen;
 
 public:
-  BasicGeneratorAwaiter(G &gen) noexcept
+  basic_generator_awaiter(G &gen) noexcept
     : _gen{gen}
   {}
 
@@ -217,11 +217,11 @@ template<
   template<class> class S,
   template<class, template<class> class> class A
 >
-struct BasicGenerator final
-  : detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>
+struct basic_generator final
+  : detail::coroutine_base<typename P::template type<basic_generator<P, S, A>>>
 {
   using base =
-    detail::CoroutineBase<typename P::template type<BasicGenerator<P, S, A>>>;
+    detail::coroutine_base<typename P::template type<basic_generator<P, S, A>>>;
 
 public:
   using typename base::promise_type;
@@ -231,17 +231,17 @@ public:
 
   using base::base;
 
-  BasicGenerator(BasicGenerator &&) = default;
+  basic_generator(basic_generator &&) = default;
 
-  ~BasicGenerator() {
+  ~basic_generator() {
     if (this->_handle) {
       this->_handle.destroy();
     }
   }
 
-  A<BasicGenerator, S> operator co_await()
+  A<basic_generator, S> operator co_await()
     noexcept(
-      std::is_nothrow_constructible_v<A<BasicGenerator, S>, BasicGenerator &>
+      std::is_nothrow_constructible_v<A<basic_generator, S>, basic_generator &>
     ) {
     return {*this};
   }
@@ -251,8 +251,8 @@ public:
 
 namespace std {
   template<class P>
-  struct hash<::wscoro::detail::CoroutineBase<P>> {
-    size_t operator()(const ::wscoro::detail::CoroutineBase<P> &co) const
+  struct hash<::wscoro::detail::coroutine_base<P>> {
+    size_t operator()(const ::wscoro::detail::coroutine_base<P> &co) const
       noexcept
     {
       return hash<remove_cvref_t<decltype(co._handle)>>{}(co._handle);

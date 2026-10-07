@@ -10,28 +10,28 @@ Ts add_one(int x) {
 }
 
 // BasicTask
-static_assert(std::is_move_constructible_v<Task<>>,
-              "Task should be movable");
-static_assert(!std::is_copy_constructible_v<Task<>>,
-              "Task should not be copiable");
+static_assert(std::is_move_constructible_v<task<>>,
+              "task should be movable");
+static_assert(!std::is_copy_constructible_v<task<>>,
+              "task should not be copiable");
 // BasicGenerator
-static_assert(std::is_move_constructible_v<Generator<int>>,
-              "Generator should be movable");
-static_assert(!std::is_copy_constructible_v<Generator<int>>,
-              "Generator should not be copiable");
+static_assert(std::is_move_constructible_v<generator<int>>,
+              "generator should be movable");
+static_assert(!std::is_copy_constructible_v<generator<int>>,
+              "generator should not be copiable");
 // BasicCoroutine
-static_assert(std::is_move_constructible_v<FireAndForget>,
-              "FireAndForget should be movable");
-static_assert(!std::is_copy_constructible_v<FireAndForget>,
-              "FireAndForget should not be copiable");
+static_assert(std::is_move_constructible_v<fire_and_forget>,
+              "fire_and_forget should be movable");
+static_assert(!std::is_copy_constructible_v<fire_and_forget>,
+              "fire_and_forget should not be copiable");
 
 template<class C>
 C get_coroutine() {
   co_return;
 }
 
-TEMPLATE_TEST_CASE("Move coroutine", "[basic]", (Task<>), (Generator<int>),
-                   FireAndForget) {
+TEMPLATE_TEST_CASE("Move coroutine", "[basic]", (task<>), (generator<int>),
+                   fire_and_forget) {
   auto co1 = get_coroutine<TestType>();
   auto co2 = std::move(co1);
   REQUIRE( !co1);
@@ -39,11 +39,11 @@ TEMPLATE_TEST_CASE("Move coroutine", "[basic]", (Task<>), (Generator<int>),
 }
 
 TEMPLATE_TEST_CASE("co_return", "[basic][task]",
-                   (Immediate<int>), (Lazy<int>), (Task<int>),
-                   (ImmediateTask<int>)) {
+                   (immediate<int>), (lazy<int>), (task<int>),
+                   (immediate_task<int>)) {
   auto t = add_one<TestType>(1);
   auto awaiter = t.operator co_await();
-  if constexpr (std::is_base_of_v<wscoro::suspend::BasicInitialSuspend<true>,
+  if constexpr (std::is_base_of_v<wscoro::suspend::basic_initial_suspend<true>,
                                   typename TestType::promise_type>) {
     REQUIRE(!awaiter.await_ready());
     awaiter.await_suspend(std::noop_coroutine()).resume();
@@ -59,7 +59,7 @@ G inc_twice(int x) {
 }
 
 TEMPLATE_TEST_CASE("co_yield", "[basic][generator]",
-                   (Generator<int>), (AsyncGenerator<int>)) {
+                   (generator<int>), (async_generator<int>)) {
   auto t = inc_twice<TestType>(1);
   auto awaiter = t.operator co_await();
   REQUIRE(!awaiter.await_ready());
@@ -74,7 +74,7 @@ TEMPLATE_TEST_CASE("co_yield", "[basic][generator]",
   REQUIRE(awaiter.await_resume() == std::nullopt);
 }
 
-FireAndForget inc_ref(int &x) {
+fire_and_forget inc_ref(int &x) {
   ++x;
   co_return;
 }
@@ -110,7 +110,7 @@ static TTask<int> get_one(int &counter) {
 
 TEST_CASE("Basic Task suspension", "[basic][task]") {
   int counter = 0;
-  auto get_one = ::get_one<Task>(counter);
+  auto get_one = ::get_one<task>(counter);
   REQUIRE(counter == 0);
 
   get_one.resume();
@@ -126,7 +126,7 @@ TEST_CASE("Basic Task suspension", "[basic][task]") {
 
 TEST_CASE("Basic ImmediateTask suspension", "[basic][task]") {
   int counter = 0;
-  auto get_one = ::get_one<ImmediateTask>(counter);
+  auto get_one = ::get_one<immediate_task>(counter);
   REQUIRE(counter == 1);
 
   get_one.resume();
@@ -136,7 +136,7 @@ TEST_CASE("Basic ImmediateTask suspension", "[basic][task]") {
   REQUIRE(get_one.operator co_await().await_resume() == 1);
 }
 
-Task<std::coroutine_handle<>> get_this_coroutine() {
+task<std::coroutine_handle<>> get_this_coroutine() {
   co_return co_await this_coroutine;
 }
 

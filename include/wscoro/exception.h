@@ -5,14 +5,14 @@
 namespace wscoro::exception {
 
 // Ignores unhandled exceptions.
-struct IgnoreExceptions {
+struct ignore_exceptions {
   constexpr void unhandled_exception() const noexcept {}
   constexpr void rethrow_exception() const noexcept {}
 };
 
 // Stores the current exception to rethrow once control returns to the
 // coroutine's caller.
-struct AsyncThrow {
+struct async_throw {
 private:
   std::exception_ptr _exception = nullptr;
 
@@ -29,7 +29,7 @@ public:
 };
 
 // Immediately rethrows unhandled exceptions.
-struct SyncThrow {
+struct sync_throw {
   [[noreturn]] void unhandled_exception() const {
     std::rethrow_exception(std::current_exception());
   }

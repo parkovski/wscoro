@@ -22,13 +22,13 @@ static void step(int n, unsigned &flags) {
   flags |= 1 << n;
 }
 
-static Task<> get_second_task(unsigned &flags) {
+static task<> get_second_task(unsigned &flags) {
   auto onexit = scope_exit([&] () { step(2, flags); });
   step(1, flags);
   co_return;
 }
 
-static Task<> get_first_task(unsigned &flags) {
+static task<> get_first_task(unsigned &flags) {
   auto onexit = scope_exit([&] () { step(5, flags); });
 
   // First resume.

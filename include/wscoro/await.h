@@ -7,7 +7,7 @@ namespace wscoro {
 namespace detail {
 
 template<class P>
-struct ThisCoroutineAwaiter final {
+struct this_coroutine_awaiter final {
   std::coroutine_handle<P> _coroutine = nullptr;
 
   bool await_ready() const noexcept {
@@ -25,14 +25,14 @@ struct ThisCoroutineAwaiter final {
   }
 };
 
-struct ThisCoroutineTag final {};
+struct this_coroutine_tag final {};
 
 } // namespace detail
 
 namespace await {
 
 /// Disables the `co_await` operator by marking `await_transform` as deleted.
-struct DisableAwait final {
+struct disable_await final {
   template<class>
   struct type {
     template<class T>
@@ -45,7 +45,7 @@ struct DisableAwait final {
 /// \param Transforms A list of default constructible types each containing an
 ///        `await_transform` method.
 template<template<class> class... Transforms>
-struct EnableAwait final {
+struct enable_await final {
   template<class P>
   struct type : Transforms<P>... {
     using Transforms<P>::await_transform...;
@@ -62,7 +62,7 @@ struct EnableAwait final {
 /// \param Transforms A list of default constructible types each containing an
 ///        `await_transform` method.
 template<template<class> class... Transforms>
-struct OnlyAwait final {
+struct only_await final {
   template<class P>
   struct type : Transforms<P>... {
     using Transforms<P>::await_transform...;
@@ -72,9 +72,9 @@ struct OnlyAwait final {
 /// Enables the expression `co_await wscoro::this_coroutine` which returns a
 /// handle to the current coroutine.
 template<class P>
-struct ThisCoroutine {
-  detail::ThisCoroutineAwaiter<P>
-  await_transform(const detail::ThisCoroutineTag &) noexcept {
+struct await_this_coroutine {
+  detail::this_coroutine_awaiter<P>
+  await_transform(const detail::this_coroutine_tag &) noexcept {
     return {std::coroutine_handle<P>::from_promise(*static_cast<P *>(this))};
   }
 };
@@ -83,6 +83,6 @@ struct ThisCoroutine {
 
 /// If enabled with `await::ThisCoroutine`, awaiting this returns a handle to
 /// the current coroutine.
-constexpr detail::ThisCoroutineTag this_coroutine;
+constexpr detail::this_coroutine_tag this_coroutine;
 
 } // namespace wscoro

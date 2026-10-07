@@ -13,7 +13,7 @@ namespace wscoro {
 /// A scheduler for types where await_ready always returns true. In this case,
 /// await_suspend and therefore this type's operator() should never be called.
 template<class T>
-struct ReadyScheduler {
+struct ready_scheduler {
   [[maybe_unused]] T &_task;
 
   std::coroutine_handle<>
@@ -25,13 +25,13 @@ struct ReadyScheduler {
 
 /// A basic scheduler that runs the task and then the continuation.
 template<class T>
-struct SyncScheduler {
+struct sync_scheduler {
   T &_task;
 
   std::coroutine_handle<>
   operator()(std::coroutine_handle<> continuation) const {
     if constexpr (
-      std::is_base_of_v<detail::Continuation, typename T::promise_type>
+      std::is_base_of_v<detail::with_continuation, typename T::promise_type>
     ) {
       _task.promise().set_continuation(continuation);
       if (_task.promise().did_initial_suspend()) {
@@ -50,7 +50,7 @@ struct SyncScheduler {
       // Rule: If you can await and be awaited, you need a continuation.
       static_assert(
         std::is_base_of_v<
-          await::DisableAwait::type<typename T::promise_type>,
+          await::disable_await::type<typename T::promise_type>,
           typename T::promise_type
         >
       );
@@ -65,11 +65,11 @@ struct SyncScheduler {
 /// Warning: If this is used with a generator, it will start a new thread each
 /// time it is awaited.
 template<class T>
-struct RunInNewThread {
+struct run_in_new_thread {
   T &_task;
   std::binary_semaphore _sema{0};
 
-  struct SignalCoroutine {
+  struct signal_coroutine {
     struct promise_type;
 
     std::coroutine_handle<promise_type> _handle;
@@ -82,14 +82,14 @@ struct RunInNewThread {
       constexpr std::suspend_never final_suspend() const noexcept {
         return {};
       }
-      SignalCoroutine get_return_object() noexcept {
+      signal_coroutine get_return_object() noexcept {
         return {std::coroutine_handle<promise_type>::from_promise(*this)};
       }
       constexpr void unhandled_exception() const noexcept {}
     };
   };
 
-  SignalCoroutine signal() {
+  signal_coroutine signal() {
     _sema.release();
     co_return;
   }
@@ -101,7 +101,7 @@ struct RunInNewThread {
     assert(_task.promise().did_initial_suspend());
 
     if constexpr (
-      std::is_base_of_v<detail::Continuation, typename T::promise_type>
+      std::is_base_of_v<detail::with_continuation, typename T::promise_type>
     ) {
       auto sig = signal();
       _task.promise().set_continuation(sig._handle);
@@ -114,7 +114,7 @@ struct RunInNewThread {
       // resuming the continuation before the task is finished.
       static_assert(
         std::is_base_of_v<
-          await::DisableAwait::type<typename T::promise_type>,
+          await::disable_await::type<typename T::promise_type>,
           typename T::promise_type
         >
       );
@@ -133,7 +133,7 @@ struct RunInNewThread {
 /// Warning: If this is used with a generator, it will start a new thread each
 /// time it is awaited.
 template<class T>
-struct SwitchToNewThread {
+struct switch_to_new_thread {
   T &_task;
 
   std::coroutine_handle<>
@@ -143,7 +143,7 @@ struct SwitchToNewThread {
     assert(_task.promise().did_initial_suspend());
 
     if constexpr (
-      std::is_base_of_v<detail::Continuation, typename T::promise_type>
+      std::is_base_of_v<detail::with_continuation, typename T::promise_type>
     ) {
       _task.promise().set_continuation(continuation);
       std::jthread{[&_task](){
@@ -155,7 +155,7 @@ struct SwitchToNewThread {
       // resuming the continuation before the task is finished.
       static_assert(
         std::is_base_of_v<
-          await::DisableAwait::type<typename T::promise_type>,
+          await::disable_await::type<typename T::promise_type>,
           typename T::promise_type
         >
       );

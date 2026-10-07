@@ -6,7 +6,7 @@
 
 using namespace wscoro;
 
-static Generator<int> fibonacci() {
+static generator<int> fibonacci() {
   int a0 = 1;
   int a1 = 1;
   while (true) {
@@ -17,7 +17,7 @@ static Generator<int> fibonacci() {
   }
 }
 
-static AsyncGenerator<int> async_fib() {
+static async_generator<int> async_fib() {
   auto fib = fibonacci();
   while (true) {
     co_yield *co_await fib;
@@ -25,7 +25,7 @@ static AsyncGenerator<int> async_fib() {
 }
 
 template<typename G>
-static ImmediateTask<std::string> get_seq(G generator, int rounds) {
+static immediate_task<std::string> get_seq(G generator, int rounds) {
   std::stringstream ss;
   if (rounds > 0) {
     for (int i = 0; i < rounds - 1; i++) {

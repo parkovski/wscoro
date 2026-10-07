@@ -11,10 +11,10 @@ namespace detail {
 /// \param Suspend Determines whether the coroutine should suspend at this
 ///        point.
 template<bool Suspend>
-using BasicSuspend =
+using basic_suspend =
   std::conditional_t<Suspend, std::suspend_always, std::suspend_never>;
 
-struct Continuation {
+struct with_continuation {
 protected:
   std::coroutine_handle<> _continuation = nullptr;
 
@@ -28,7 +28,7 @@ public:
   }
 };
 
-struct Resumer {
+struct resumer {
   std::coroutine_handle<> _coroutine;
 
   bool await_ready() const noexcept {
@@ -60,8 +60,8 @@ namespace suspend {
 ///
 /// \param Suspend Determines whether the coroutine suspends initially.
 template<bool Suspend>
-struct BasicInitialSuspend {
-  constexpr detail::BasicSuspend<Suspend> initial_suspend() const noexcept {
+struct basic_initial_suspend {
+  constexpr detail::basic_suspend<Suspend> initial_suspend() const noexcept {
     return {};
   }
 
@@ -78,15 +78,15 @@ struct BasicInitialSuspend {
 ///
 /// \param Suspend Determines whether the coroutine suspends on completion.
 template<bool Suspend>
-struct BasicFinalSuspend {
-  constexpr detail::BasicSuspend<Suspend> final_suspend() const noexcept {
+struct basic_final_suspend {
+  constexpr detail::basic_suspend<Suspend> final_suspend() const noexcept {
     return {};
   }
 };
 
-struct FinalSuspendWithContinuation 
-  : detail::Continuation {
-  detail::Resumer final_suspend() const noexcept {
+struct final_suspend_with_continuation 
+  : detail::with_continuation {
+  detail::resumer final_suspend() const noexcept {
     return {this->_continuation};
   }
 };

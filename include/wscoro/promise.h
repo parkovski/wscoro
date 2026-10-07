@@ -6,7 +6,7 @@
 namespace wscoro {
 
 template<class Return, class Await, class... Mixins>
-struct Promise {
+struct promise {
   template<class Task>
   struct type :
     public Return,

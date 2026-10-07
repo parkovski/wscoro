@@ -64,16 +64,16 @@ void test_suspend(int steps_a, int steps_b, const char *expected) {
 
 TEST_CASE("Suspension", "[task]") {
   test_suspend<
-    ImmediateTask<void>, ImmediateTask<void>>(0, 1,
+    immediate_task<void>, immediate_task<void>>(0, 1,
     "A: [A0, [B0], A1], B: [B1, [A2, AF], BF]");
   test_suspend<
-    Task<void>, ImmediateTask<void>>(1, 1,
+    task<void>, immediate_task<void>>(1, 1,
     "A: [A0, [B0], A1], B: [B1, [A2, AF], BF]");
 
   test_suspend<
-    ImmediateTask<void>, Task<void>>(0, 1,
+    immediate_task<void>, task<void>>(0, 1,
     "A: [A0, A1], [B0], B: [B1, [A2, AF], BF]");
   test_suspend<
-    Task<void>, Task<void>>(1, 1,
+    task<void>, task<void>>(1, 1,
     "A: [A0, A1], [B0], B: [B1, [A2, AF], BF]");
 }
