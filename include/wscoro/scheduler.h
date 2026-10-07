@@ -107,7 +107,7 @@ struct run_in_new_thread {
     ) {
       auto sig = signal();
       _task.promise().set_continuation(sig._handle);
-      std::jthread{[&_task](){
+      std::jthread{[this](){
         // TODO: What if this throws an exception?
         _task.resume();
       }};
@@ -120,7 +120,7 @@ struct run_in_new_thread {
           typename T::promise_type
         >
       );
-      std::jthread{[&_task, &_sema](){
+      std::jthread{[this](){
         // TODO: What if this throws an exception?
         _task.resume();
         _sema.release();
@@ -148,7 +148,7 @@ struct switch_to_new_thread {
       std::is_base_of_v<detail::with_continuation, typename T::promise_type>
     ) {
       _task.promise().set_continuation(continuation);
-      std::jthread{[&_task](){
+      std::jthread{[this](){
           // TODO: What if this throws an exception?
         _task.resume();
       }};
@@ -161,7 +161,7 @@ struct switch_to_new_thread {
           typename T::promise_type
         >
       );
-      std::jthread{[&_task, continuation](){
+      std::jthread{[this, continuation](){
           // TODO: What if this throws an exception?
         _task.resume();
         continuation.resume();

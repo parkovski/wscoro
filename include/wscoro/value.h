@@ -10,6 +10,10 @@
 namespace wscoro {
 namespace detail {
 
+// gcc: requested alignment '0' is not a positive power of 2.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
 template<typename T, size_t Align = 0>
@@ -82,6 +86,8 @@ public:
     return std::move(_data);
   }
 };
+
+#pragma GCC diagnostic pop
 
 template<>
 struct promise_data<void, 0> {
