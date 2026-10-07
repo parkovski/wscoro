@@ -11,8 +11,10 @@ namespace wscoro {
 namespace detail {
 
 // gcc: requested alignment '0' is not a positive power of 2.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wattributes"
+#ifdef __GNUC__
+# pragma GCC diagnostic push
+# pragma GCC diagnostic ignored "-Wattributes"
+#endif
 
 // Space for the promise return/yield data, reusable with proper lifetime
 // support.
@@ -87,7 +89,9 @@ public:
   }
 };
 
-#pragma GCC diagnostic pop
+#ifdef __GNUC__
+# pragma GCC diagnostic pop
+#endif
 
 template<>
 struct promise_data<void, 0> {
