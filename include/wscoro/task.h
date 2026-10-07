@@ -14,9 +14,6 @@ namespace detail {
 /// \param P The promise type.
 template<class P>
 struct coroutine_base {
-public:
-  friend struct std::hash<coroutine_base>;
-
   using promise_type = P;
 
 protected:
@@ -255,7 +252,42 @@ namespace std {
     size_t operator()(const ::wscoro::detail::coroutine_base<P> &co) const
       noexcept
     {
-      return hash<remove_cvref_t<decltype(co._handle)>>{}(co._handle);
+      return hash<remove_cvref_t<decltype(co.handle())>>{}(co.handle());
+    }
+  };
+
+  template<class P>
+  struct hash<::wscoro::basic_coroutine<P>> {
+    size_t operator()(const ::wscoro::basic_coroutine<P> &co) const
+      noexcept
+    {
+      return hash<remove_cvref_t<decltype(co.handle())>>{}(co.handle());
+    }
+  };
+
+  template<
+    class P,
+    template<class> class S,
+    template<class, template<class> class> class A
+  >
+  struct hash<::wscoro::basic_task<P, S, A>> {
+    size_t operator()(const ::wscoro::basic_task<P, S, A> &co) const
+      noexcept
+    {
+      return hash<remove_cvref_t<decltype(co.handle())>>{}(co.handle());
+    }
+  };
+
+  template<
+    class P,
+    template<class> class S,
+    template<class, template<class> class> class A
+  >
+  struct hash<::wscoro::basic_generator<P, S, A>> {
+    size_t operator()(const ::wscoro::basic_generator<P, S, A> &co) const
+      noexcept
+    {
+      return hash<remove_cvref_t<decltype(co.handle())>>{}(co.handle());
     }
   };
 }

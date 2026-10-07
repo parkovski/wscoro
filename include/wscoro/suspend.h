@@ -3,6 +3,7 @@
 #include <coroutine>
 #include <type_traits>
 #include <cassert>
+#include <atomic>
 
 namespace wscoro {
 namespace detail {
