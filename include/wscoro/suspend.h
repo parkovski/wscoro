@@ -70,6 +70,9 @@ struct basic_initial_suspend {
   }
 };
 
+// Keeps track of whether the task is in its initial suspend. This could be
+// useful for some types of schedulers. This type always suspends initially. If
+// you don't want an initial suspend, use basic_initial_suspend<false>.
 struct tracking_initial_suspend {
 private:
   std::atomic_flag _flag{};
