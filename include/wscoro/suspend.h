@@ -17,7 +17,7 @@ using basic_suspend =
 
 struct with_continuation {
 protected:
-  std::coroutine_handle<> _continuation = nullptr;
+  std::coroutine_handle<> _continuation = std::noop_coroutine();
 
 public:
   void set_continuation(std::coroutine_handle<> continuation) noexcept {
@@ -38,10 +38,8 @@ struct resumer {
 
   std::coroutine_handle<>
   await_suspend(std::coroutine_handle<>) const noexcept {
-    if (_coroutine) {
-      return _coroutine;
-    }
-    return std::noop_coroutine();
+    assert(!!_coroutine);
+    return _coroutine;
   }
 
   void await_resume() const noexcept {}
