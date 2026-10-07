@@ -11,6 +11,7 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <iostream>
 
 using namespace wscoro;
 
@@ -171,6 +172,11 @@ public:
     state->ss.str("");
     return s;
   }
+
+  std::string get_noclear() {
+    std::lock_guard lock(state->mutex);
+    return state->ss.str();
+  }
 };
 
 std::weak_ptr<TraceLogger::State> TraceLogger::s_state;
@@ -216,33 +222,16 @@ struct TraceAwait : private T {
   }
 
   template<
-    class P,
     class AS = decltype(&T::await_suspend),
     class = std::enable_if_t<
-      std::is_invocable_v<AS, T &, std::coroutine_handle<P>>
+      std::is_invocable_v<AS, T &, std::coroutine_handle<>>
     >
   >
-  decltype(auto) await_suspend(std::coroutine_handle<P> handle)
-    noexcept(AwaitSuspendNoexcept<T, P>)
+  decltype(auto) await_suspend(std::coroutine_handle<> handle)
+    noexcept(AwaitSuspendNoexcept<T>)
   {
     logger("await_suspend");
     return this->T::await_suspend(handle);
-  }
-
-  template<
-    class P,
-    class PB = typename P::base,
-    class AS = decltype(&T::await_suspend),
-    class = std::enable_if_t<
-      std::is_invocable_v<AS, T &, std::coroutine_handle<PB>> &&
-      !std::is_invocable_v<AS, T &, std::coroutine_handle<P>>
-    >
-  >
-  decltype(auto) await_suspend(std::coroutine_handle<P> handle)
-    noexcept(AwaitSuspendNoexcept<T, PB>)
-  {
-    logger("await_suspend");
-    return this->T::await_suspend(handle_cast<PB>(handle));
   }
 
   decltype(auto) await_resume()
@@ -256,43 +245,32 @@ struct TraceAwait : private T {
 template<class T>
 TraceAwait(std::string, T &&) -> TraceAwait<T>;
 
-template<traits::BasicTaskTraits T>
-struct TraceTraits : public T {
-  using initial_suspend_type = TraceAwait<std::suspend_never>;
-};
-
-template<
-  template<class, class> class TaskT,
-  class T,
-  class Traits
->
-struct Trace<TaskT<T, Traits>> : public TaskT<T, TraceTraits<Traits>> {
+template<class TaskT>
+struct Trace {
+  TaskT task;
   TraceLogger logger;
 
-  using base = TaskT<T, TraceTraits<Traits>>;
-  using base_promise_type = typename base::promise_type;
-
-  template<typename B = base>
-  using value_type = typename B::value_type;
+  using task_type = TaskT;
+  using task_promise_type = typename task_type::promise_type;
 
   struct promise_type;
 
 private:
-  static std::coroutine_handle<base_promise_type>
+  static std::coroutine_handle<task_promise_type>
   to_base(std::coroutine_handle<promise_type> ch) noexcept {
-    return std::coroutine_handle<base_promise_type>::from_promise(
+    return std::coroutine_handle<task_promise_type>::from_promise(
       ch.promise());
   }
 
 public:
   explicit Trace(std::coroutine_handle<promise_type> coroutine) noexcept
-    : base{to_base(coroutine)}, logger{"task"}
+    : task{to_base(coroutine)}, logger{"task"}
   {
     logger("init promise=", coroutine.promise().logger.name);
   }
 
   Trace(Trace &&) = default;
-  Trace &operator=(Trace &&) = default;
+  Trace &operator=(Trace &&) = delete;
 
   Trace(const Trace &) = delete;
   Trace &operator=(const Trace &) = delete;
@@ -301,6 +279,12 @@ public:
     if (logger) logger("destroy");
   }
 
+  template<class = decltype(task.operator co_await())>
+  auto operator co_await() {
+    return TraceAwait{"awaiter", task.operator co_await()};
+  }
+
+#if 0
   template<typename B = base, typename = decltype(&B::await_ready)>
   bool await_ready() const
     noexcept(
@@ -335,11 +319,12 @@ public:
     logger("await_resume");
     return this->base::await_resume();
   }
+#endif
 
-  struct promise_type : base_promise_type {
+  struct promise_type : task_promise_type {
     TraceLogger logger;
 
-    using base = base_promise_type;
+    using base = task_promise_type;
 
     promise_type() noexcept
       : logger{"promise"}
@@ -360,18 +345,17 @@ public:
     }
 
     auto initial_suspend() const noexcept {
-      return TraceAwait<typename Traits::initial_suspend_type>{
-        "initial_suspend"
-      };
+      return TraceAwait<decltype(base::initial_suspend())>{"initial_suspend"};
     }
 
     auto final_suspend() const noexcept {
       return TraceAwait<decltype(base::final_suspend())>{"final_suspend"};
     }
 
-    template<typename U = T>
+    template<typename U = typename task_type::value_type,
+             typename = std::enable_if_t<!std::is_void_v<U>>>
     decltype(auto)
-    yield_value(std::enable_if_t<!std::is_void_v<U>, T> &&value)
+    yield_value(U &&value)
       noexcept(noexcept(
         static_cast<base *>(this)->yield_value(std::move(value))))
     {
@@ -379,9 +363,10 @@ public:
       return TraceAwait{"yield", this->base::yield_value(std::move(value))};
     }
 
-    template<typename U = T>
+    template<typename U = typename task_type::value_type,
+             typename = std::enable_if_t<!std::is_void_v<U>>>
     decltype(auto)
-    yield_value(std::enable_if_t<!std::is_void_v<U>, T> const &value)
+    yield_value(U const &value)
       noexcept(noexcept(static_cast<base *>(this)->yield_value(value)))
     {
       logger("yield.copy");
@@ -398,7 +383,7 @@ public:
 // Test implementation {{{
 //
 
-template<int N, int Resume, class TaskT>
+template<int N, int Resume, bool IsGenerator, class TaskT>
 std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
   union ManualScope {
     TraceLogger logger;
@@ -412,35 +397,56 @@ std::string test_lifecycle_a(Trace<TaskT> (*lifecycle)(int)) {
   scope.logger("init");
   {
     auto task = lifecycle(N);
+    auto awaiter = task.operator co_await();
 
+    int resume = 0;
     while (true) {
-      if (!task.await_ready()) {
-        if (auto c = task.await_suspend(nullptr)) {
-          c.resume();
-        }
-
-        for (int resume = 0; resume < Resume; ++resume) {
-          CHECK(!task.done());
-          scope.logger("resume count=", resume);
-          task.resume();
-        }
-      }
-
-      if constexpr (TaskT::is_generator::value) {
-        // FIXME - generator optional
-        if (auto r = task.await_resume(); r.has_value()) {
-          scope.logger("generator yield");
-          if (result.length()) result += " ";
-          result += std::to_string(*r);
+      if (awaiter.await_ready()) {
+        if constexpr (IsGenerator) {
+          auto r = awaiter.await_resume();
+          if (r.has_value()) {
+            scope.logger("generator yield");
+            if (result.length()) result += " ";
+            result += std::to_string(*r);
+          } else {
+            CHECK(task.task.done());
+            break;
+          }
         } else {
-          CHECK(task.done());
-          scope.logger("generator done");
+          CHECK(task.task.done());
+          result = std::to_string(awaiter.await_resume());
           break;
         }
       } else {
-        CHECK(task.done());
-        result = std::to_string(task.await_resume());
-        break;
+        auto c = awaiter.await_suspend(std::noop_coroutine());
+        if (c != std::noop_coroutine()) {
+          //resume = 0;
+          //while (!c.done()) {
+            scope.logger("resume count=", resume++);
+            c.resume();
+          //}
+          /*for (int resume = 0; resume < Resume; ++resume) {
+            CHECK(!task.task.done());
+            scope.logger("resume count=", resume);
+            c.resume();
+          }*/
+        } else if (task.task.done()) {
+          break;
+        } else {
+          task.task.resume();
+          if constexpr (IsGenerator) {
+            auto r = awaiter.await_resume();
+            if (!r.has_value()) {
+              break;
+            }
+            scope.logger("generator yield");
+            if (result.length()) result += " ";
+            result += std::to_string(*r);
+          } else {
+            result = awaiter.await_resume();
+            break;
+          }
+        }
       }
     }
   }
@@ -478,7 +484,7 @@ Trace<TaskG> lifecycle_ay(int n) {
   for (int i = 0; i < n; ++i) {
     auto task = lifecycle_a<TaskA>(0);
     counter += co_await task;
-    CHECK(task.done());
+    CHECK(task.task.done());
     co_yield counter;
   }
   co_return;
@@ -510,7 +516,7 @@ std::string test_lifecycle_f() {
   scope.impl.logger("init");
   {
     new (&scope.impl.task) Trace<FireAndForget>{lifecycle_f(result)};
-    auto coro = scope.impl.task.detach();
+    auto coro = scope.impl.task.task.handle();
     scope.impl.task.~Trace<FireAndForget>();
     coro.resume();
   }
@@ -522,27 +528,38 @@ std::string test_lifecycle_f() {
   return s;
 }
 
-TEST_CASE("Lifecycle", "[lifecycle]") {
-
-  CHECK(test_lifecycle_a<1, 0>(&lifecycle_s<Immediate<int>>) ==
+TEST_CASE("Lifecycle Immediate", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<1, 0, false>(&lifecycle_s<Immediate<int>>) ==
           lcresult<Immediate<>>);
+}
 
-  CHECK(test_lifecycle_a<2, 0>(&lifecycle_s<Lazy<int>>) ==
+TEST_CASE("Lifecycle Lazy", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<2, 0, false>(&lifecycle_s<Lazy<int>>) ==
           lcresult<Lazy<>>);
+}
 
-  CHECK(test_lifecycle_a<3, 3>(&lifecycle_a<DelayTask<int>>) ==
-        lcresult<DelayTask<>>);
+TEST_CASE("Lifecycle Task", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<3, 3, false>(&lifecycle_a<Task<int>>) ==
+          lcresult<Task<>>);
+}
 
-  CHECK(test_lifecycle_a<3, 2>(&lifecycle_a<Task<int>>) ==
-        lcresult<Task<>>);
+TEST_CASE("Lifecycle ImmediateTask", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<3, 3, false>(&lifecycle_a<ImmediateTask<int>>) ==
+          lcresult<ImmediateTask<>>);
+}
 
-  CHECK(test_lifecycle_a<3, 0>(&lifecycle_y<Generator<int>>) ==
-        lcresult<Generator<int>>);
+TEST_CASE("Lifecycle Generator", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<3, 0, true>(&lifecycle_y<Generator<int>>) ==
+          lcresult<Generator<int>>);
+}
 
-  CHECK(test_lifecycle_a<3, 0>(&lifecycle_ay<AsyncGenerator<int>>) ==
-        lcresult<AsyncGenerator<int>>);
+TEST_CASE("Lifecycle AsyncGenerator", "[lifecycle]") {
+  REQUIRE(test_lifecycle_a<3, 3, true>(&lifecycle_ay<AsyncGenerator<int>>) ==
+          lcresult<AsyncGenerator<int>>);
+}
 
-  CHECK(test_lifecycle_f() == lcresult<FireAndForget>);
+TEST_CASE("Lifecycle FireAndForget", "[lifecycle]") {
+  REQUIRE(test_lifecycle_f() == lcresult<FireAndForget>);
 }
 
 //

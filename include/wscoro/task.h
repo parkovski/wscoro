@@ -87,6 +87,7 @@ struct BasicCoroutine
 public:
   using typename base::promise_type;
   using outer_promise_type = P;
+  using value_type = void;
 
   using base::base;
 
