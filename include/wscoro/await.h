@@ -2,6 +2,7 @@
 
 #include <coroutine>
 #include <type_traits>
+#include <cassert>
 
 namespace wscoro {
 namespace detail {
@@ -10,15 +11,12 @@ template<class P>
 struct this_coroutine_awaiter final {
   std::coroutine_handle<P> _coroutine = nullptr;
 
-  bool await_ready() const noexcept {
-    return !!_coroutine;
+  constexpr bool await_ready() const noexcept {
+    assert(!!_coroutine);
+    return true;
   }
 
-  bool await_suspend(std::coroutine_handle<P> coroutine) noexcept {
-    _coroutine = coroutine;
-    // Resume this coroutine.
-    return false;
-  }
+  constexpr void await_suspend(std::coroutine_handle<P>) const noexcept {}
 
   std::coroutine_handle<P> await_resume() const noexcept {
     return _coroutine;
@@ -72,7 +70,7 @@ struct only_await final {
 /// Enables the expression `co_await wscoro::this_coroutine` which returns a
 /// handle to the current coroutine.
 template<class P>
-struct await_this_coroutine {
+struct this_coroutine {
   detail::this_coroutine_awaiter<P>
   await_transform(const detail::this_coroutine_tag &) noexcept {
     return {std::coroutine_handle<P>::from_promise(*static_cast<P *>(this))};

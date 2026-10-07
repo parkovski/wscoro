@@ -42,7 +42,7 @@ using lazy = basic_task<promise<
 template<class T = void, template<class> class S = sync_scheduler>
 using task = basic_task<promise<
   value::basic_return<T>,
-  await::enable_await<await::await_this_coroutine>,
+  await::enable_await<await::this_coroutine>,
   exception::async_throw,
   suspend::basic_initial_suspend<true>,
   suspend::final_suspend_with_continuation
@@ -54,7 +54,7 @@ using task = basic_task<promise<
 template<class T = void>
 using immediate_task = basic_task<promise<
   value::basic_return<T>,
-  await::enable_await<await::await_this_coroutine>,
+  await::enable_await<await::this_coroutine>,
   exception::async_throw,
   suspend::basic_initial_suspend<false>,
   suspend::final_suspend_with_continuation
@@ -77,7 +77,7 @@ using generator = basic_generator<promise<
 template<class T, template<class> class S = sync_scheduler>
 using async_generator = basic_generator<promise<
   value::yield_with_continuation<T>,
-  await::enable_await<await::await_this_coroutine>,
+  await::enable_await<await::this_coroutine>,
   exception::async_throw,
   suspend::basic_initial_suspend<true>
 >, S>;
@@ -86,7 +86,7 @@ using async_generator = basic_generator<promise<
 /// return a value.
 using fire_and_forget = basic_coroutine<promise<
   value::basic_return<void>,
-  await::enable_await<await::await_this_coroutine>,
+  await::enable_await<await::this_coroutine>,
   exception::sync_throw,
   suspend::basic_initial_suspend<false>,
   suspend::basic_final_suspend<false>
