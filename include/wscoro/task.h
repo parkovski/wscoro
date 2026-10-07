@@ -118,7 +118,7 @@ public:
     return _task.done();
   }
 
-  std::coroutine_handle<>
+  decltype(auto)
   await_suspend(std::coroutine_handle<> continuation) const noexcept {
     return S<T>{_task}(continuation);
   }
@@ -193,7 +193,7 @@ public:
     return _gen.promise().has_value() || _gen.done();
   }
 
-  std::coroutine_handle<>
+  decltype(auto)
   await_suspend(std::coroutine_handle<> continuation) const noexcept {
     return S<G>{_gen}(continuation);
   }
