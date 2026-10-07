@@ -36,6 +36,8 @@ struct sync_scheduler {
       _task.promise().set_continuation(continuation);
       if (_task.promise().did_initial_suspend()) {
         // If the task had an initial suspend, awaiting it should start it.
+        // This includes resuming from a yield point in a generator, so
+        // generators should have an initial suspend to enable this.
         return _task.handle();
       } else {
         // If there was no initial suspend, we are awaiting the task when it is

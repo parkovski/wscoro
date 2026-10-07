@@ -70,6 +70,32 @@ struct basic_initial_suspend {
   }
 };
 
+struct tracking_initial_suspend {
+private:
+  std::atomic_flag _flag{};
+
+public:
+  struct type {
+    tracking_initial_suspend &_suspend;
+
+    constexpr bool await_ready() const noexcept { return false; }
+    void await_suspend() noexcept {
+      _suspend._flag.test_and_set(std::memory_order_release);
+    }
+    void await_resume() noexcept {
+      _suspend._flag.clear(std::memory_order_release);
+    }
+  };
+
+  type initial_suspend() noexcept { return {*this}; }
+
+  constexpr bool did_initial_suspend() const noexcept { return true; }
+
+  bool is_initial_suspended() const noexcept {
+    return _flag.test(std::memory_order_acquire);
+  }
+};
+
 /// Provides a `final_suspend` that either always or never suspends.
 ///
 /// The final suspend allows the awaiter of the coroutine to obtain the value
