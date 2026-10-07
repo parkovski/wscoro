@@ -19,8 +19,8 @@ support:
 | ---: | :-------: | :--------: | :--------: | :--------: | :---------: |
 | Immediate |  ✅  |     ✅     |     ❌     |     ❌     |      ✅     |
 | Lazy      |  ✅  |     ❌     |     ❌     |     ❌     |      ✅     |
-| Task      |  ✅  |     ✅     |     ✅     |     ❌     |      ✅     |
-| DelayTask |  ✅  |     ❌     |     ✅     |     ❌     |      ✅     |
+| Task      |  ✅  |     ❌     |     ✅     |     ❌     |      ✅     |
+| ImmediateTask |  ✅  |   ✅   |     ✅     |     ❌     |      ✅     |
 | Generator |  ✅  |     ❌     |     ❌     |     ✅     |      ❌     |
 | AsyncGenerator | ✅ |  ❌     |     ✅     |     ✅     |      ❌     |
 | FireAndForget  | ❌ |  ✅     |     ✅     |     ❌     |      ❌     |
