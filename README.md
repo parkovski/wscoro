@@ -17,13 +17,13 @@ support:
 
 | Type | Awaitable | Auto-start | `co_await` | `co_yield` | `co_return` |
 | ---: | :-------: | :--------: | :--------: | :--------: | :---------: |
-| Immediate |  ✅  |     ✅     |     ❌     |     ❌     |      ✅     |
-| Lazy      |  ✅  |     ❌     |     ❌     |     ❌     |      ✅     |
-| Task      |  ✅  |     ❌     |     ✅     |     ❌     |      ✅     |
-| ImmediateTask |  ✅  |   ✅   |     ✅     |     ❌     |      ✅     |
-| Generator |  ✅  |     ❌     |     ❌     |     ✅     |      ❌     |
-| AsyncGenerator | ✅ |  ❌     |     ✅     |     ✅     |      ❌     |
-| FireAndForget  | ❌ |  ✅     |     ✅     |     ❌     |      ❌     |
+| immediate |  ✅  |     ✅     |     ❌     |     ❌     |      ✅     |
+| lazy      |  ✅  |     ❌     |     ❌     |     ❌     |      ✅     |
+| task      |  ✅  |     ❌     |     ✅     |     ❌     |      ✅     |
+| immediate_task |  ✅ |   ✅   |     ✅     |     ❌     |      ✅     |
+| generator |  ✅  |     ❌     |     ❌     |     ✅     |      ❌     |
+| async_generator | ✅ |  ❌    |     ✅     |     ✅     |      ❌     |
+| fire_and_forget  | ❌ |  ✅   |     ✅     |     ❌     |      ❌     |
 
 - **Awaitable:** The resulting task can be awaited with `co_await`.
 - **Auto-start:** The resulting task begins automatically when created. Types
