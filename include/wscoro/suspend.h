@@ -77,7 +77,7 @@ private:
   std::atomic_flag _flag{};
 
 public:
-  struct type {
+  struct awaiter {
     tracking_initial_suspend &_suspend;
 
     constexpr bool await_ready() const noexcept { return false; }
@@ -89,7 +89,7 @@ public:
     }
   };
 
-  type initial_suspend() noexcept { return {*this}; }
+  awaiter initial_suspend() noexcept { return {*this}; }
 
   constexpr bool did_initial_suspend() const noexcept { return true; }
 
