@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16.3 FATAL_ERROR)
 
 project(wscoro)
 set(wscoro_VERSION_MAJOR 0)
-set(wscoro_VERSION_MINOR 2)
+set(wscoro_VERSION_MINOR 3)
 set(wscoro_VERSION_PATCH 0)
 
 set(CMAKE_CXX_STANDARD 20)
@@ -12,19 +12,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
   # Subproject
-  set(WSCORO_BUILD_TESTS OFF)
+  set(BUILD_TESTING OFF)
 endif()
-option(WSCORO_BUILD_TESTS "Build tests" ON)
-
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  message(FATAL_ERROR "Clang does not yet support C++ coroutines")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  add_compile_options(-fcoroutines)
-endif()
+option(BUILD_TESTING "Build tests" ON)
 
 add_library(wscoro INTERFACE)
 target_include_directories(wscoro INTERFACE ${PROJECT_SOURCE_DIR}/include)
 
-if(WSCORO_BUILD_TESTS)
+if(BUILD_TESTING)
   add_subdirectory(test)
 endif()
