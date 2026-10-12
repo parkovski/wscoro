@@ -1,8 +1,6 @@
-# wscoro - Bare bones C++20 coroutine library
+# wscoro - Bring-your-own-executor C++20 coroutine library
 
-**This is an early alpha and the current API should not be considered stable.**
-
-**Currently supported compilers: MSVC, GCC.**
+**Currently supported compilers: MSVC, GCC, Clang.**
 
 wscoro implements only the essentials needed to use C++20 coroutines. There are
 no thread pools or executors; instead wscoro provides types for chaining
@@ -11,6 +9,16 @@ does not cover all possible cases, however it does support many common
 scenarios.
 
 ## Usage
+
+There are two main ways to use this library. The first is to write your own
+executor (scheduler) and provide it as a template parameter to the appropriate
+task types. The second is to use the task types as-is, and use
+`co_await wscoro::this_coroutine` to get a handle to the current coroutine and
+pass it to your executor, and then `co_await std::suspend_always{}` to wait for
+your executor to resume the task. This second usage pattern is demonstrated in
+my project [wsudo](https://github.com/parkovski/wsudo), in the CorIO files.
+
+## Details
 
 wscoro provides several different task type templates separated by feature
 support:
@@ -38,3 +46,7 @@ support:
 
 Outside of a coroutine body where `co_await` is supported, the result of a
 coroutine must be fetched with `await_resume()`.
+
+It is easy to create your own task type with the building blocks this library
+provides. See how the types are defined in
+[wscoro.h](https://github.com/parkovski/wscoro/blob/master/include/wscoro/wscoro.h).
