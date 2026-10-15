@@ -35,7 +35,8 @@ support:
 
 - **Awaitable:** The resulting task can be awaited with `co_await`.
 - **Auto-start:** The resulting task begins automatically when created. Types
-  not marked *auto-start* must be started with a call to `coroutine.resume()`.
+  not marked *auto-start* must be started by awaiting them or with a call to
+  `coroutine.resume()`.
 - **co_await:** The type supports the `co_await` operator to await another
   coroutine.
 - **co_yield:** The coroutine can "return" multiple values with `co_yield`.
